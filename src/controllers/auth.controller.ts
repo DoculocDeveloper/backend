@@ -24,12 +24,12 @@ const realEstateProfileSelect = {
 
 class AuthController {
   async register(request: Request, response: Response) {
-    const input = registerSchema.parse(request.body);
-    const isRealEstate = input.role === UserRole.REAL_ESTATE;
-    const realEstateProfile = input.realEstateProfile;
+    const { email, role, password, ...rest } = registerSchema.parse(request.body);
+    const isRealEstate = role === UserRole.REAL_ESTATE;
+    const realEstateProfile = rest.realEstateProfile;
 
     const emailAlreadyUsed = await prisma.user.findUnique({
-      where: { email: input.email },
+      where: { email: email },
     });
 
     if (emailAlreadyUsed) {
@@ -46,15 +46,15 @@ class AuthController {
       }
     }
 
-    const passwordHash = await bcrypt.hash(input.password, 10);
+    const passwordHash = await bcrypt.hash(password, 10);
 
     const user = await prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
         data: {
-          name: isRealEstate ? realEstateProfile!.responsibleName : input.name!,
-          email: input.email,
+          name: isRealEstate ? realEstateProfile!.responsibleName : name!,
+          email: email,
           passwordHash,
-          role: input.role,
+          role: role,
           ...(isRealEstate && realEstateProfile
             ? {
                 realEstateProfile: {

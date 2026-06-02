@@ -40,8 +40,6 @@ function assertContractDataIsComplete(application: any) {
     "propertyNeighborhood",
     "propertyCity",
     "propertyState",
-    "packageValue",
-    "feeValue",
   ];
 
   const missingFields = requiredFields.filter((field) => !application[field]);
@@ -128,8 +126,6 @@ export class ContractService {
         feesValue: formatCurrency(application.feesValue),
         requestedExpense: formatCurrency(application.requestedExpense),
 
-        packageValue: formatCurrency(packageValue),
-        feeValue: formatCurrency(feeValue),
         monthlyServiceFee: formatCurrency(monthlyServiceFee),
 
         realEstateName: realEstateProfile?.name ?? application.requester.name,
