@@ -24,7 +24,7 @@ const realEstateProfileSelect = {
 
 class AuthController {
   async register(request: Request, response: Response) {
-    const { email, role, password, ...rest } = registerSchema.parse(request.body);
+    const { name, email, role, password, ...rest } = registerSchema.parse(request.body);
     const isRealEstate = role === UserRole.REAL_ESTATE;
     const realEstateProfile = rest.realEstateProfile;
 

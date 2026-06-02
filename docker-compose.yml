@@ -1,0 +1,16 @@
+services:
+  postgres-doculoc:
+    image: bitnami/postgresql:latest
+    container_name: doculoc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: doculoc
+      POSTGRES_PASSWORD: doculoc
+      POSTGRES_DB: doculoc
+    ports:
+      - "5432:5432"
+    volumes:
+      - doculoc_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  doculoc_postgres_data:
