@@ -53,7 +53,7 @@ function getInitialWorkflowStatus(decisionStatus: string) {
 
 async function tryCollectOragoWithRetry(analysisId: string) {
   const attempts = 3;
-  const delayMs = 2000;
+  const delayMs = 3600;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
