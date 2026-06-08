@@ -5,7 +5,7 @@
 
 */
 -- DropIndex
-DROP INDEX "OragoConsultLock_document_idx";
+DROP INDEX IF EXISTS "OragoConsultLock_document_idx";
 
 -- AlterTable
 ALTER TABLE "OragoConsultLock" ADD COLUMN     "condominiumValue" DECIMAL(65,30),
