@@ -147,7 +147,7 @@ export class ContractService {
 
         rentValue: formatCurrency(application.rentValue),
         condominiumValue: formatCurrency(application.condominiumValue),
-        feesValue: formatCurrency(application.feesValue),
+        adhesionFee: formatCurrency(application.adhesionFee ?? 0),
         requestedExpense: formatCurrency(application.requestedExpense),
 
         monthlyServiceFee: formatCurrency(monthlyServiceFee),

@@ -22,7 +22,7 @@ export const createRentalApplicationByCpfSchema = z.object({
 
   rentValue: z.coerce.number().positive("O valor do aluguel não pode ser negativo ou zero"),
   condominiumValue: z.coerce.number().min(0, "O valor do condomínio não pode ser negativo"),
-  feesValue: z.coerce.number().min(0, "O valor das taxas não pode ser negativo"),
+  feesValue: z.coerce.number().min(0, "O valor do IPTU não pode ser negativo"),
 });
 
 export const createRentalApplicationByCnpjSchema = z.object({
@@ -30,7 +30,7 @@ export const createRentalApplicationByCnpjSchema = z.object({
 
   rentValue: z.coerce.number().positive("O valor do aluguel não pode ser negativo ou zero"),
   condominiumValue: z.coerce.number().min(0, "O valor do condomínio não pode ser negativo"),
-  feesValue: z.coerce.number().min(0, "O valor das taxas não pode ser negativo"),
+  feesValue: z.coerce.number().min(0, "O valor do IPTU não pode ser negativo"),
 });
 
 export const rentalApplicationParamsSchema = z.object({
@@ -55,6 +55,8 @@ export const fillContractDataSchema = z.object({
   propertyNeighborhood: z.string().min(2, "O bairro da propriedade deve conter pelo menos 2 caracteres"),
   propertyCity: z.string().min(2, "A cidade da propriedade deve conter pelo menos 2 caracteres"),
   propertyState: z.string().length(2, "O estado da propriedade deve conter exatamente 2 caracteres"),
+
+  adhesionFee: z.coerce.number().min(0, "O valor da taxas de adesão não pode ser negativo")
 });
 
 export const contestRentalApplicationSchema = z.object({

@@ -780,6 +780,7 @@ export class RentalApplicationService {
       propertyNeighborhood: string;
       propertyCity: string;
       propertyState: string;
+      adhesionFee: number;
     };
   }) {
     const application = await prisma.rentalApplication.findUnique({
