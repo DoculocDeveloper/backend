@@ -80,7 +80,7 @@ export class ContractService {
     if (application.status !== "WAITING_ADMIN_CONTRACT") {
       throw new AppError(
         400,
-        "Essa consulta ainda não está pronta para geração de contrato",
+        "Essa consulta ainda não está pronta para geração de contrato.",
       );
     }
 
