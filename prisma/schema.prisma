@@ -210,7 +210,7 @@ model RentalApplication {
   rentValue        Decimal
   condominiumValue Decimal
   feesValue        Decimal
-  adhesionFee      Decimal
+  adhesionFee      Decimal?
   requestedExpense Decimal
 
   automaticDecision AutomaticDecisionStatus
