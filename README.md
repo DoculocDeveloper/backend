@@ -193,6 +193,8 @@ Imobiliária preenche dados do contrato
   ↓
 Status: WAITING_ADMIN_CONTRACT
   ↓
+Admin pode revisar aluguel, condomínio e IPTU
+  ↓
 Admin gera contrato
   ↓
 Status: CONTRACT_GENERATED
@@ -818,6 +820,33 @@ GET /rental-applications/:id
 
 ---
 
+## Editar valores locatícios antes do contrato
+
+Role: `ADMIN`
+
+Permite que o usuário administrador ajuste os valores de aluguel, condomínio e IPTU antes da geração do contrato.
+
+```http
+PATCH /rental-applications/:id/rental-values
+Authorization: Bearer TOKEN_ADMIN
+```
+
+```json
+{
+  "rentValue": 2800,
+  "condominiumValue": 450,
+  "feesValue": 180
+}
+```
+
+Permitido quando a consulta está em:
+
+```txt
+WAITING_ADMIN_CONTRACT
+```
+
+---
+
 ## Preencher dados para contrato
 
 Role: `REAL_ESTATE`
@@ -848,10 +877,10 @@ Permitido quando a consulta está em:
 WAITING_CONTRACT_DATA
 ```
 
-Após preenchimento, o status muda para:
+Após preenchimento, o backend recalcula:
 
 ```txt
-WAITING_ADMIN_CONTRACT
+requestedExpense = rentValue + condominiumValue + feesValue
 ```
 
 ---
