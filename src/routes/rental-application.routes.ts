@@ -40,6 +40,12 @@ rentalApplicationRoutes.get(
 );
 
 rentalApplicationRoutes.patch(
+  "/:id/rental-values",
+  authorize(UserRole.ADMIN),
+  asyncHandler(rentalApplicationController.updateRentalValues),
+);
+
+rentalApplicationRoutes.patch(
   "/:id/contract-data",
   authorize(UserRole.REAL_ESTATE),
   asyncHandler(rentalApplicationController.fillContractData),

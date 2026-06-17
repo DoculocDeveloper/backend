@@ -37,6 +37,12 @@ export const rentalApplicationParamsSchema = z.object({
   id: z.string().uuid("O ID da solicitação de aluguel deve ser um UUID válido"),
 });
 
+export const updateRentalValuesSchema = z.object({
+  rentValue: z.coerce.number().positive("O valor do aluguel deve ser maior que zero"),
+  condominiumValue: z.coerce.number().min(0, "O valor do condomínio não pode ser negativo"),
+  feesValue: z.coerce.number().min(0, "O valor do IPTU não pode ser negativo"),
+});
+
 export const fillContractDataSchema = z.object({
   tenantName: z.string().min(3, "O nome do inquilino deve conter pelo menos 3 caracteres"),
   tenantDocument: z

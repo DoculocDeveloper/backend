@@ -765,6 +765,64 @@ export class RentalApplicationService {
     }
   }
 
+  async updateRentalValues(params: {
+    applicationId: string;
+    adminId: string;
+    data: {
+      rentValue: number;
+      condominiumValue: number;
+      feesValue: number;
+    };
+  }) {
+    const application = await prisma.rentalApplication.findUnique({
+      where: {
+        id: params.applicationId,
+      },
+    });
+
+    if (!application) {
+      throw new AppError(404, "Consulta não encontrada");
+    }
+
+    if (application.status !== "WAITING_ADMIN_CONTRACT") {
+      throw new AppError(
+        400,
+        "Os valores só podem ser editados antes da geração do contrato.",
+        "RENTAL_VALUES_EDIT_NOT_ALLOWED",
+      );
+    }
+
+    const requestedExpense =
+      params.data.rentValue +
+      params.data.condominiumValue +
+      params.data.feesValue;
+
+    const updatedApplication = await prisma.rentalApplication.update({
+      where: {
+        id: params.applicationId,
+      },
+      data: {
+        rentValue: params.data.rentValue,
+        condominiumValue: params.data.condominiumValue,
+        feesValue: params.data.feesValue,
+        requestedExpense,
+      },
+    });
+
+    await prisma.contract.updateMany({
+      where: {
+        applicationId: params.applicationId,
+        status: "FAILED",
+      },
+      data: {
+        status: "PENDING",
+        errorMessage: null,
+      },
+    });
+
+    return updatedApplication;
+  }
+
   async fillContractData(params: {
     applicationId: string;
     requesterId: string;

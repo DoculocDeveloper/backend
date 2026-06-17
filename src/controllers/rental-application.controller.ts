@@ -14,6 +14,7 @@ import {
   contestRentalApplicationSchema,
   createRentalApplicationByCnpjSchema,
   createRentalApplicationByCpfSchema,
+  updateRentalValuesSchema,
   fillContractDataSchema,
   listRentalApplicationsSchema,
   rentalApplicationParamsSchema,
@@ -210,6 +211,19 @@ export class RentalApplicationController {
         oragoData: undefined,
       },
     });
+  }
+
+  async updateRentalValues(request: Request, response: Response) {
+    const params = rentalApplicationParamsSchema.parse(request.params);
+    const body = updateRentalValuesSchema.parse(request.body);
+
+    const application = await rentalApplicationService.updateRentalValues({
+      applicationId: params.id,
+      adminId: request.user!.id,
+      data: body,
+    });
+
+    return response.json({ application });
   }
 
   async fillContractData(request: Request, response: Response) {
