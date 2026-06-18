@@ -973,9 +973,31 @@ export class RentalApplicationService {
       throw new AppError(404, "Consulta não encontrada");
     }
 
+    const blockedStatuses = ["CONTRACT_GENERATED", "CANCELLED"];
+
+    if (blockedStatuses.includes(application.status)) {
+      throw new AppError(
+        400,
+        "Não é possível alterar manualmente uma consulta finalizada ou cancelada.",
+        "ADMIN_DECISION_NOT_ALLOWED",
+      );
+    }
+
+    const hasContractData =
+      Boolean(application.tenantName) &&
+      Boolean(application.tenantDocument) &&
+      Boolean(application.propertyZipCode) &&
+      Boolean(application.propertyStreet) &&
+      Boolean(application.propertyNumber) &&
+      Boolean(application.propertyNeighborhood) &&
+      Boolean(application.propertyCity) &&
+      Boolean(application.propertyState);
+
     const nextStatus =
       params.decision === "APPROVED"
-        ? "WAITING_CONTRACT_DATA"
+        ? hasContractData
+          ? "WAITING_ADMIN_CONTRACT"
+          : "WAITING_CONTRACT_DATA"
         : "ADMIN_REJECTED";
 
     const updatedApplication = await prisma.$transaction(async (tx) => {
