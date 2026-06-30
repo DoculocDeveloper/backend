@@ -43,16 +43,32 @@ export const updateRentalValuesSchema = z.object({
   feesValue: z.coerce.number().min(0, "O valor do IPTU não pode ser negativo"),
 });
 
-export const fillContractDataSchema = z.object({
-  tenantName: z.string().min(3, "O nome do inquilino deve conter pelo menos 3 caracteres"),
-  tenantDocument: z
-  .string()
-  .regex(
-    /^\d{11}$|^\d{14}$/,
-    "O documento do locatário deve ser CPF com 11 dígitos ou CNPJ com 14 dígitos",
+const digitsOnly = (value: unknown) =>
+  typeof value === "string" ? value.replace(/\D/g, "") : value;
+
+const contractTenantSchema = z.object({
+  name: z.string().min(3, "Informe o nome completo do locatário"),
+  document: z.preprocess(
+    digitsOnly,
+    z
+      .string()
+      .regex(
+        /^\d{11}$|^\d{14}$/,
+        "O documento deve ser CPF com 11 dígitos ou CNPJ com 14 dígitos",
+      ),
   ),
-  tenantEmail: z.string().email("O email do inquilino deve ser um email válido"),
-  tenantPhone: z.string().min(8, "O telefone do inquilino deve conter pelo menos 8 caracteres"),
+  email: z.string().email("Informe um email válido"),
+  phone: z.preprocess(
+    digitsOnly,
+    z.string().min(8, "Informe um telefone válido"),
+  ),
+});
+
+export const fillContractDataSchema = z.object({
+  tenants: z
+    .array(contractTenantSchema)
+    .min(1, "Informe pelo menos 1 locatário")
+    .max(3, "É permitido informar no máximo 3 locatários"),
 
   propertyZipCode: z.string().min(8, "O CEP da propriedade deve conter pelo menos 8 caracteres"),
   propertyStreet: z.string().min(3, "A rua da propriedade deve conter pelo menos 3 caracteres"),

@@ -58,6 +58,32 @@ enum ContractStatus {
   FAILED
 }
 
+enum ContractSignatureStatus {
+  NOT_SENT
+  ENVELOPE_CREATED
+  SENT
+  PARTIALLY_SIGNED
+  SIGNED
+  REFUSED
+  CANCELLED
+  ERROR
+}
+
+enum ContractSignerRole {
+  TENANT
+  REAL_ESTATE
+  DOCULOC
+}
+
+enum ContractSignerStatus {
+  PENDING
+  SENT
+  SIGNED
+  REFUSED
+  CANCELLED
+  ERROR
+}
+
 enum CreditLedgerType {
   INITIAL_GRANT
   ADMIN_SET
@@ -245,6 +271,7 @@ model RentalApplication {
 
   contests RentalApplicationContest[]
   contract Contract?
+  tenants  RentalApplicationTenant[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -252,6 +279,26 @@ model RentalApplication {
   @@index([requesterId])
   @@index([status])
   @@index([automaticDecision])
+}
+
+model RentalApplicationTenant {
+  id String @id @default(uuid())
+
+  applicationId String
+  application   RentalApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  order Int
+
+  name     String
+  document String
+  email    String
+  phone    String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([applicationId, order])
+  @@index([applicationId])
 }
 
 model RentalApplicationContest {
@@ -309,6 +356,65 @@ model Contract {
   errorMessage String?
 
   generatedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+
+  clicksignEnvelopeId String?                 @unique
+  clicksignDocumentId String?
+  signatureStatus     ContractSignatureStatus @default(NOT_SENT)
+  signatureError      String?
+  sentToSignatureAt   DateTime?
+  signedAt            DateTime?
+
+  signers       ContractSigner[]
+  webhookEvents ClicksignWebhookEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([signatureStatus])
+}
+
+model ContractSigner {
+  id String @id @default(uuid())
+
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  role ContractSignerRole
+
+  name     String
+  email    String
+  phone    String?
+  document String?
+
+  clicksignSignerId String?
+  status            ContractSignerStatus @default(PENDING)
+
+  signedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([contractId])
+  @@index([clicksignSignerId])
+  @@index([status])
+}
+
+model ClicksignWebhookEvent {
+  id String @id @default(uuid())
+
+  contractId String?
+  contract   Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+
+  eventName           String?
+  clicksignEnvelopeId String?
+  clicksignDocumentId String?
+  clicksignSignerId   String?
+
+  payload String
+
+  createdAt DateTime @default(now())
+
+  @@index([contractId])
+  @@index([clicksignEnvelopeId])
+  @@index([eventName])
 }

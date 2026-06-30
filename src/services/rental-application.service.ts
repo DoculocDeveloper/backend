@@ -827,10 +827,12 @@ export class RentalApplicationService {
     applicationId: string;
     requesterId: string;
     data: {
-      tenantName: string;
-      tenantDocument: string;
-      tenantEmail: string;
-      tenantPhone: string;
+      tenants: Array<{
+        name: string;
+        document: string;
+        email: string;
+        phone: string;
+      }>;
       propertyZipCode: string;
       propertyStreet: string;
       propertyNumber: string;
@@ -853,16 +855,6 @@ export class RentalApplicationService {
       throw new AppError(403, "Acesso negado");
     }
 
-    const tenantDocument = params.data.tenantDocument.replace(/\D/g, "");
-
-    if (tenantDocument !== application.document) {
-      throw new AppError(
-        400,
-        "O documento do locatário deve ser o mesmo utilizado na consulta.",
-        "TENANT_DOCUMENT_MISMATCH",
-      );
-    }
-
     const canFillContractData = application.status === "WAITING_CONTRACT_DATA";
 
     if (!canFillContractData) {
@@ -872,26 +864,72 @@ export class RentalApplicationService {
       );
     }
 
-    const updatedApplication = await prisma.rentalApplication.update({
-      where: { id: params.applicationId },
-      data: {
-        ...params.data,
-        status: "WAITING_ADMIN_CONTRACT",
-      },
-    });
+    const [mainTenant] = params.data.tenants;
 
-    await prisma.contract.upsert({
-      where: {
-        applicationId: params.applicationId,
-      },
-      create: {
-        applicationId: params.applicationId,
-        status: "PENDING",
-        templateName: "default-rental-application-contract.docx",
-      },
-      update: {
-        status: "PENDING",
-      },
+    const mainTenantDocument = mainTenant.document.replace(/\D/g, "");
+
+    if (mainTenantDocument !== application.document) {
+      throw new AppError(
+        400,
+        "O documento do primeiro locatário deve ser o mesmo utilizado na consulta.",
+        "MAIN_TENANT_DOCUMENT_MISMATCH",
+      );
+    }
+
+    const updatedApplication = await prisma.$transaction(async (tx) => {
+      const updated = await tx.rentalApplication.update({
+        where: { id: params.applicationId },
+        data: {
+          tenantName: mainTenant.name,
+          tenantDocument: mainTenantDocument,
+          tenantEmail: mainTenant.email,
+          tenantPhone: mainTenant.phone.replace(/\D/g, ""),
+
+          propertyZipCode: params.data.propertyZipCode.replace(/\D/g, ""),
+          propertyStreet: params.data.propertyStreet,
+          propertyNumber: params.data.propertyNumber,
+          propertyComplement: params.data.propertyComplement,
+          propertyNeighborhood: params.data.propertyNeighborhood,
+          propertyCity: params.data.propertyCity,
+          propertyState: params.data.propertyState,
+          adhesionFee: params.data.adhesionFee,
+
+          status: "WAITING_ADMIN_CONTRACT",
+        },
+      });
+
+      await tx.rentalApplicationTenant.deleteMany({
+        where: {
+          applicationId: params.applicationId,
+        },
+      });
+
+      await tx.rentalApplicationTenant.createMany({
+        data: params.data.tenants.map((tenant, index) => ({
+          applicationId: params.applicationId,
+          order: index + 1,
+          name: tenant.name,
+          document: tenant.document.replace(/\D/g, ""),
+          email: tenant.email,
+          phone: tenant.phone.replace(/\D/g, ""),
+        })),
+      });
+
+      await tx.contract.upsert({
+        where: {
+          applicationId: params.applicationId,
+        },
+        create: {
+          applicationId: params.applicationId,
+          status: "PENDING",
+          templateName: "default-rental-application-contract.docx",
+        },
+        update: {
+          status: "PENDING",
+        },
+      });
+
+      return updated;
     });
 
     return updatedApplication;
@@ -1031,5 +1069,50 @@ export class RentalApplicationService {
     });
 
     return updatedApplication;
+  }
+
+  async deleteApplication(params: {
+    applicationId: string;
+    requesterId: string;
+    role: string;
+  }) {
+    const application = await prisma.rentalApplication.findUnique({
+      where: {
+        id: params.applicationId,
+      },
+      include: {
+        contract: true,
+      },
+    });
+
+    if (!application) {
+      throw new AppError(404, "Consulta não encontrada");
+    }
+
+    if (
+      params.role !== "ADMIN" &&
+      application.requesterId !== params.requesterId
+    ) {
+      throw new AppError(403, "Acesso negado");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.oragoConsultLock.deleteMany({
+        where: {
+          document: application.document,
+        },
+      });
+
+      await tx.rentalApplication.delete({
+        where: {
+          id: application.id,
+        },
+      });
+    });
+
+    return {
+      deleted: true,
+      id: application.id,
+    };
   }
 }

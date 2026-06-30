@@ -63,4 +63,10 @@ rentalApplicationRoutes.patch(
   asyncHandler(rentalApplicationController.adminDecide),
 );
 
+rentalApplicationRoutes.delete(
+  "/:id",
+  authorize(UserRole.ADMIN, UserRole.REAL_ESTATE),
+  asyncHandler(rentalApplicationController.delete),
+);
+
 export { rentalApplicationRoutes };

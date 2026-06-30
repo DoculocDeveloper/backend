@@ -40,7 +40,7 @@ const realEstateProfileSelect = {
   updatedAt: true,
 } as const;
 
-class AuthController {
+export class AuthController {
   async register(request: Request, response: Response) {
     const { name, email, role, password, ...rest } = registerSchema.parse(
       request.body,
@@ -279,5 +279,3 @@ class AuthController {
     return response.json({ message: "Senha redefinida com sucesso" });
   }
 }
-
-export { AuthController };

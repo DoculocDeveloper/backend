@@ -110,8 +110,17 @@ export class RentalApplicationController {
               },
             },
           },
-          contract: true,
+          contract: {
+            include: {
+              signers: true,
+            },
+          },
           contests: true,
+          tenants: {
+            orderBy: {
+              order: "asc",
+            },
+          },
         },
       }),
       prisma.rentalApplication.count({ where }),
@@ -175,7 +184,20 @@ export class RentalApplicationController {
           },
         },
         contests: true,
-        contract: true,
+        contract: {
+          include: {
+            signers: {
+              orderBy: {
+                createdAt: "asc",
+              },
+            },
+          },
+        },
+        tenants: {
+          orderBy: {
+            order: "asc",
+          },
+        },
       },
     });
 
@@ -198,11 +220,31 @@ export class RentalApplicationController {
 
     const tenantDocument = application.tenantDocument ?? application.document;
 
+    const tenants =
+      application.tenants.length > 0
+        ? application.tenants
+        : tenantName
+          ? [
+              {
+                id: "legacy-main-tenant",
+                applicationId: application.id,
+                order: 1,
+                name: tenantName,
+                document: tenantDocument,
+                email: application.tenantEmail ?? "",
+                phone: application.tenantPhone ?? "",
+                createdAt: application.createdAt,
+                updatedAt: application.updatedAt,
+              },
+            ]
+          : [];
+
     return response.json({
       application: {
         ...application,
         tenantName,
         tenantDocument,
+        tenants,
         decisionReasons: JSON.parse(application.decisionReasons),
         decisionMetadata: application.decisionMetadata
           ? JSON.parse(application.decisionMetadata)
@@ -264,5 +306,17 @@ export class RentalApplicationController {
     });
 
     return response.json({ application });
+  }
+
+  async delete(request: Request, response: Response) {
+    const params = rentalApplicationParamsSchema.parse(request.params);
+
+    await rentalApplicationService.deleteApplication({
+      applicationId: params.id,
+      requesterId: request.user!.id,
+      role: request.user!.role,
+    });
+
+    return response.status(204).send();
   }
 }

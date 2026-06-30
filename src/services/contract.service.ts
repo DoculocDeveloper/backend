@@ -35,10 +35,6 @@ function formatCurrency(value: unknown) {
 
 function assertContractDataIsComplete(application: any) {
   const requiredFields = [
-    "tenantName",
-    "tenantDocument",
-    "tenantEmail",
-    "tenantPhone",
     "propertyZipCode",
     "propertyStreet",
     "propertyNumber",
@@ -55,6 +51,13 @@ function assertContractDataIsComplete(application: any) {
       `Dados obrigatórios ausentes para gerar contrato: ${missingFields.join(", ")}`,
     );
   }
+
+  if (!application.tenants || application.tenants.length === 0) {
+    throw new AppError(
+      400,
+      "Informe pelo menos um locatário para gerar o contrato.",
+    );
+  }
 }
 
 export class ContractService {
@@ -65,6 +68,11 @@ export class ContractService {
       },
       include: {
         contract: true,
+        tenants: {
+          orderBy: {
+            order: "asc",
+          },
+        },
         requester: {
           include: {
             realEstateProfile: true,
@@ -112,6 +120,29 @@ export class ContractService {
     const monthlyServiceFee = packageValue * 0.1;
     const realEstateProfile = application.requester.realEstateProfile;
 
+    const tenants =
+      application.tenants.length > 0
+        ? application.tenants.map((tenant) => ({
+            order: tenant.order,
+            name: tenant.name,
+            document: tenant.document,
+            email: tenant.email,
+            phone: tenant.phone,
+            tenantLine: `${tenant.order}. Nome: ${tenant.name} | Documento: ${tenant.document} | E-mail: ${tenant.email} | Tel.: ${tenant.phone}`,
+          }))
+        : [
+            {
+              order: 1,
+              name: application.tenantName ?? "",
+              document: application.tenantDocument ?? "",
+              email: application.tenantEmail ?? "",
+              phone: application.tenantPhone ?? "",
+              tenantLine: `1. Nome: ${application.tenantName ?? ""} | Documento: ${application.tenantDocument ?? ""} | E-mail: ${application.tenantEmail ?? ""} | Tel.: ${application.tenantPhone ?? ""}`,
+            },
+          ];
+
+    const mainTenant = tenants[0];
+
     try {
       const realEstateAddressLine = [
         realEstateProfile?.street,
@@ -132,10 +163,13 @@ export class ContractService {
         .join(", ");
 
       doc.render({
-        tenantName: application.tenantName,
-        tenantDocument: application.tenantDocument,
-        tenantEmail: application.tenantEmail,
-        tenantPhone: application.tenantPhone,
+        tenantName: mainTenant.name,
+        tenantDocument: mainTenant.document,
+        tenantEmail: mainTenant.email,
+        tenantPhone: mainTenant.phone,
+
+        tenants,
+        tenantCount: tenants.length,
 
         propertyZipCode: application.propertyZipCode,
         propertyStreet: application.propertyStreet,

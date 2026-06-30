@@ -85,32 +85,63 @@ export class StorageService {
     };
   }
 
+  async getObjectBuffer(params: {
+    key?: string | null;
+    filePath?: string | null;
+  }) {
+    if (env.STORAGE_DRIVER === "local") {
+      const localPath = params.filePath ?? params.key;
+
+      if (!localPath) {
+        throw new Error("Caminho local do arquivo não informado");
+      }
+
+      return fs.readFileSync(localPath);
+    }
+
+    if (!params.key) {
+      throw new Error("Chave do arquivo não informada");
+    }
+
+    const file = await this.getObjectStream({
+      key: params.key,
+    });
+
+    const chunks: Buffer[] = [];
+
+    for await (const chunk of file.stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+
+    return Buffer.concat(chunks);
+  }
+
   async getObjectStream(params: { key: string }) {
-  if (!this.s3Client) {
-    throw new Error("S3 client não configurado");
+    if (!this.s3Client) {
+      throw new Error("S3 client não configurado");
+    }
+
+    const object = await this.s3Client.send(
+      new GetObjectCommand({
+        Bucket: env.S3_BUCKET!,
+        Key: params.key,
+      }),
+    );
+
+    if (!object.Body) {
+      throw new Error("Arquivo não encontrado no storage");
+    }
+
+    if (!(object.Body instanceof Readable)) {
+      throw new Error("Formato de stream inválido retornado pelo storage");
+    }
+
+    return {
+      stream: object.Body,
+      contentType: object.ContentType,
+      contentLength: object.ContentLength,
+    };
   }
-
-  const object = await this.s3Client.send(
-    new GetObjectCommand({
-      Bucket: env.S3_BUCKET!,
-      Key: params.key,
-    }),
-  );
-
-  if (!object.Body) {
-    throw new Error("Arquivo não encontrado no storage");
-  }
-
-  if (!(object.Body instanceof Readable)) {
-    throw new Error("Formato de stream inválido retornado pelo storage");
-  }
-
-  return {
-    stream: object.Body,
-    contentType: object.ContentType,
-    contentLength: object.ContentLength,
-  };
-}
 
   async getSignedDownloadUrl(params: {
     key: string;
