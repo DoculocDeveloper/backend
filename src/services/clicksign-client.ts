@@ -17,6 +17,27 @@ function assertClicksignConfigured() {
   }
 }
 
+function onlyDigits(value?: string | null) {
+  return value ? value.replace(/\D/g, "") : "";
+}
+
+function formatClicksignDocumentation(value?: string | null) {
+  const digits = onlyDigits(value);
+
+  if (digits.length === 11) {
+    return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+  }
+
+  if (digits.length === 14) {
+    return digits.replace(
+      /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+      "$1.$2.$3/$4-$5",
+    );
+  }
+
+  return null;
+}
+
 export class ClicksignClient {
   private async request<T>(path: string, init: RequestInit = {}) {
     assertClicksignConfigured();
@@ -52,9 +73,17 @@ export class ClicksignClient {
     });
 
     if (!response.ok) {
+      console.error("[CLICKSIGN_ERROR_RESPONSE]", {
+        path,
+        method: init.method ?? "GET",
+        status: response.status,
+        body: JSON.stringify(body, null, 2),
+      });
+
       const message =
         body?.errors?.[0]?.detail ??
         body?.errors?.[0]?.title ??
+        body?.errors?.[0]?.source?.pointer ??
         body?.message ??
         body?.raw ??
         "Erro ao chamar API da Clicksign";
@@ -116,7 +145,7 @@ export class ClicksignClient {
     documentation?: string | null;
     group?: number;
   }) {
-    const documentation = params.documentation?.replace(/\D/g, "") || null;
+    const documentation = formatClicksignDocumentation(params.documentation);
 
     const attributes: Record<string, unknown> = {
       name: params.name,

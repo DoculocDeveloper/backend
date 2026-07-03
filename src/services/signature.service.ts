@@ -10,6 +10,14 @@ import { DocumentConverterService } from "./document-converter.service.js";
 import { ClicksignClient } from "./clicksign-client.js";
 import { StorageService } from "./storage.service.js";
 
+type PreparedSigner = {
+  role: "TENANT" | "REAL_ESTATE" | "DOCULOC";
+  name: string;
+  email: string;
+  phone?: string | null;
+  document?: string | null;
+};
+
 const clicksignClient = new ClicksignClient();
 const storageService = new StorageService();
 const documentConverterService = new DocumentConverterService();
@@ -40,13 +48,11 @@ function assertDoculocSignerConfigured() {
   }
 }
 
-type PreparedSigner = {
-  role: "TENANT" | "REAL_ESTATE" | "DOCULOC";
-  name: string;
-  email: string;
-  phone?: string | null;
-  document?: string | null;
-};
+function hasValidDocumentation(value?: string | null) {
+  const digits = onlyDigits(value);
+
+  return digits.length === 11 || digits.length === 14;
+}
 
 export class SignatureService {
   private buildSigners(contract: any): PreparedSigner[] {
@@ -162,6 +168,19 @@ export class SignatureService {
       throw new AppError(400, "Nenhum signatário encontrado para o contrato.");
     }
 
+    const invalidTenantSigner = signers.find(
+      (signer) =>
+        signer.role === "TENANT" && !hasValidDocumentation(signer.document),
+    );
+
+    if (invalidTenantSigner) {
+      throw new AppError(
+        400,
+        `Documento inválido para o locatário ${invalidTenantSigner.name}. Informe CPF ou CNPJ válido antes de enviar para assinatura.`,
+        "INVALID_TENANT_DOCUMENT_FOR_SIGNATURE",
+      );
+    }
+
     const fileBuffer = await storageService.getObjectBuffer({
       key: contract.storageKey,
       filePath: contract.filePath,
@@ -253,7 +272,7 @@ export class SignatureService {
         const signerDocument = onlyDigits(signer.document);
 
         const shouldSendDocumentation =
-          signer.role === "TENANT" && signerDocument.length > 0;
+          signer.role === "TENANT" && [11, 14].includes(signerDocument.length);
 
         const clicksignSigner = await clicksignClient.createSigner({
           envelopeId,
