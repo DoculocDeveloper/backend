@@ -292,7 +292,7 @@ export class SignatureService {
         });
 
         const authenticationMethod =
-          signer.role === "TENANT" ? "facematch" : "email";
+          signer.role === "TENANT" ? "facial_biometrics" : "email";
 
         await clicksignClient.createAuthenticationRequirement({
           envelopeId,

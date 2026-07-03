@@ -9,6 +9,26 @@ type ClicksignDataResponse<T = any> = {
   };
 };
 
+type ClicksignAuthMethod =
+  | "email"
+  | "sms"
+  | "whatsapp"
+  | "pix"
+  | "facial_biometrics"
+  | "biometric"
+  | "identity_biometrics"
+  | "official_document"
+  | "liveness"
+  | "selfie"
+  | "documentscopy"
+  | "address_proof"
+  | "handwritten"
+  | "icp_brasil"
+  | "registro_civil"
+  | "embedded_signature"
+  | "presential"
+  | "auto_signature";
+
 function assertClicksignConfigured() {
   if (!env.CLICKSIGN_BASE_URL || !env.CLICKSIGN_ACCESS_TOKEN) {
     throw new Error(
@@ -219,7 +239,7 @@ export class ClicksignClient {
     envelopeId: string;
     documentId: string;
     signerId: string;
-    auth: "email" | "facematch";
+    auth: ClicksignAuthMethod;
   }) {
     return this.request<ClicksignDataResponse>(
       `/api/v3/envelopes/${params.envelopeId}/requirements`,
