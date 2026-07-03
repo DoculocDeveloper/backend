@@ -116,6 +116,26 @@ export class ClicksignClient {
     documentation?: string | null;
     group?: number;
   }) {
+    const documentation = params.documentation?.replace(/\D/g, "") || null;
+
+    const attributes: Record<string, unknown> = {
+      name: params.name,
+      email: params.email,
+      phone_number: params.phoneNumber ?? null,
+      refusable: true,
+      group: params.group ?? 1,
+      communicate_events: {
+        document_signed: "email",
+        signature_request: "email",
+        signature_reminder: "email",
+      },
+    };
+
+    if (documentation) {
+      attributes.has_documentation = true;
+      attributes.documentation = documentation;
+    }
+
     return this.request<ClicksignDataResponse>(
       `/api/v3/envelopes/${params.envelopeId}/signers`,
       {
@@ -123,20 +143,7 @@ export class ClicksignClient {
         body: JSON.stringify({
           data: {
             type: "signers",
-            attributes: {
-              name: params.name,
-              email: params.email,
-              phone_number: params.phoneNumber ?? null,
-              has_documentation: true,
-              documentation: params.documentation ?? null,
-              refusable: true,
-              group: params.group ?? 1,
-              communicate_events: {
-                document_signed: "email",
-                signature_request: "email",
-                signature_reminder: "email",
-              },
-            },
+            attributes,
           },
         }),
       },

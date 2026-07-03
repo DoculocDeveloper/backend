@@ -250,12 +250,17 @@ export class SignatureService {
       const createdSigners = [];
 
       for (const signer of signers) {
+        const signerDocument = onlyDigits(signer.document);
+
+        const shouldSendDocumentation =
+          signer.role === "TENANT" && signerDocument.length > 0;
+
         const clicksignSigner = await clicksignClient.createSigner({
           envelopeId,
           name: signer.name,
           email: signer.email,
           phoneNumber: onlyDigits(signer.phone) || null,
-          documentation: onlyDigits(signer.document) || null,
+          documentation: shouldSendDocumentation ? signerDocument : null,
           group: 1,
         });
 
@@ -267,8 +272,8 @@ export class SignatureService {
           signerId: clicksignSignerId,
         });
 
-        const authenticationMethod = signer.role === "TENANT" ? "facematch" : "email";
-
+        const authenticationMethod =
+          signer.role === "TENANT" ? "facematch" : "email";
 
         await clicksignClient.createAuthenticationRequirement({
           envelopeId,
