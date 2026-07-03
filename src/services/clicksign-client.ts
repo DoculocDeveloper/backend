@@ -113,6 +113,7 @@ export class ClicksignClient {
     name: string;
     email: string;
     phoneNumber?: string | null;
+    documentation?: string | null;
     group?: number;
   }) {
     return this.request<ClicksignDataResponse>(
@@ -127,6 +128,7 @@ export class ClicksignClient {
               email: params.email,
               phone_number: params.phoneNumber ?? null,
               has_documentation: true,
+              documentation: params.documentation ?? null,
               refusable: true,
               group: params.group ?? 1,
               communicate_events: {
@@ -181,6 +183,7 @@ export class ClicksignClient {
     envelopeId: string;
     documentId: string;
     signerId: string;
+    auth: "email" | "facematch";
   }) {
     return this.request<ClicksignDataResponse>(
       `/api/v3/envelopes/${params.envelopeId}/requirements`,
@@ -191,7 +194,7 @@ export class ClicksignClient {
             type: "requirements",
             attributes: {
               action: "provide_evidence",
-              auth: "email",
+              auth: params.auth,
             },
             relationships: {
               document: {
