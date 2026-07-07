@@ -163,9 +163,11 @@ export class AuthController {
       throw new AppError(401, "Credenciais inválidas");
     }
 
+    const expiresIn = user.role === "ADMIN" ? "7d" : "12h";
+
     const token = jwt.sign({ role: user.role }, env.JWT_SECRET, {
       subject: user.id,
-      expiresIn: "7d",
+      expiresIn: expiresIn,
     });
 
     return response.json({
