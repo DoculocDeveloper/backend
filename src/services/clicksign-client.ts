@@ -308,4 +308,22 @@ export class ClicksignClient {
       },
     );
   }
+
+  async cancelDocument(params: { envelopeId: string; documentId: string }) {
+    return this.request<ClicksignDataResponse>(
+      `/api/v3/envelopes/${params.envelopeId}/documents/${params.documentId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          data: {
+            id: params.documentId,
+            type: "documents",
+            attributes: {
+              status: "canceled",
+            },
+          },
+        }),
+      },
+    );
+  }
 }

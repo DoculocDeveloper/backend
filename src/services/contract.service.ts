@@ -282,6 +282,19 @@ export class ContractService {
           generatedById: params.adminId,
           generatedAt: new Date(),
           errorMessage: null,
+
+          clicksignEnvelopeId: null,
+          clicksignDocumentId: null,
+          signatureStatus: "NOT_SENT",
+          signatureError: null,
+          sentToSignatureAt: null,
+          signedAt: null,
+        },
+      });
+
+      await tx.contractSigner.deleteMany({
+        where: {
+          contractId: updatedContract.id,
         },
       });
 

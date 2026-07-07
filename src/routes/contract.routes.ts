@@ -43,4 +43,28 @@ contractRoutes.get(
   asyncHandler(signatureController.status),
 );
 
+contractRoutes.post(
+  "/:id/signature/resend-notification",
+  authorize(UserRole.ADMIN),
+  asyncHandler(signatureController.resendNotification),
+);
+
+contractRoutes.post(
+  "/:id/signature/cancel",
+  authorize(UserRole.ADMIN),
+  asyncHandler(signatureController.cancel),
+);
+
+contractRoutes.post(
+  "/:id/signature/restart",
+  authorize(UserRole.ADMIN),
+  asyncHandler(signatureController.restart),
+);
+
+contractRoutes.post(
+  "/:id/signature/reopen-contract-data",
+  authorize(UserRole.ADMIN),
+  asyncHandler(signatureController.reopenContractData),
+);
+
 export { contractRoutes };

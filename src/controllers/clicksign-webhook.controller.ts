@@ -47,6 +47,48 @@ function normalizeEventName(eventName?: string | null) {
   return String(eventName ?? "").toLowerCase();
 }
 
+function isSignedEvent(event: string) {
+  return (
+    (event.includes("document_signed") ||
+      event.includes("signer_signed") ||
+      event.includes("signature_signed") ||
+      event === "signed") &&
+    !event.includes("refused") &&
+    !event.includes("failed") &&
+    !event.includes("error")
+  );
+}
+
+function isActionRequiredEvent(event: string) {
+  return (
+    event.includes("facematch_refused") ||
+    event.includes("facial_biometrics_refused") ||
+    event.includes("authentication_failed") ||
+    event.includes("auth_failed") ||
+    event.includes("refused") ||
+    event.includes("refusal") ||
+    event.includes("failed") ||
+    event.includes("error") ||
+    event.includes("invalid")
+  );
+}
+
+function isCancelledEvent(event: string) {
+  return (
+    event.includes("cancel") ||
+    event.includes("deadline") ||
+    event.includes("expired")
+  );
+}
+
+function isClosedEvent(event: string) {
+  return (
+    event.includes("close") ||
+    event.includes("auto_close") ||
+    event.includes("document_closed")
+  );
+}
+
 export class ClicksignWebhookController {
   async handle(request: Request, response: Response) {
     if (env.CLICKSIGN_WEBHOOK_SECRET) {
@@ -100,7 +142,105 @@ export class ClicksignWebhookController {
 
     const normalizedEvent = normalizeEventName(eventName);
 
-    if (normalizedEvent.includes("sign") && signerId) {
+    if (isActionRequiredEvent(normalizedEvent)) {
+      if (signerId) {
+        await prisma.contractSigner.updateMany({
+          where: {
+            contractId: contract.id,
+            clicksignSignerId: String(signerId),
+          },
+          data: {
+            status:
+              normalizedEvent.includes("facematch") ||
+              normalizedEvent.includes("facial_biometrics") ||
+              normalizedEvent.includes("authentication")
+                ? "AUTHENTICATION_FAILED"
+                : "ACTION_REQUIRED",
+          },
+        });
+      }
+
+      await prisma.contract.update({
+        where: {
+          id: contract.id,
+        },
+        data: {
+          signatureStatus: "ACTION_REQUIRED",
+          signatureError: eventName
+            ? `Ação necessária na assinatura: ${String(eventName)}`
+            : "Ação necessária na assinatura.",
+        },
+      });
+
+      return response.json({
+        received: true,
+        matched: true,
+      });
+    }
+
+    if (isCancelledEvent(normalizedEvent)) {
+      await prisma.contract.update({
+        where: {
+          id: contract.id,
+        },
+        data: {
+          signatureStatus: "CANCELLED",
+          signatureError: eventName
+            ? `Assinatura cancelada ou expirada: ${String(eventName)}`
+            : "Assinatura cancelada ou expirada.",
+        },
+      });
+
+      await prisma.contractSigner.updateMany({
+        where: {
+          contractId: contract.id,
+          status: {
+            not: "SIGNED",
+          },
+        },
+        data: {
+          status: "CANCELLED",
+        },
+      });
+
+      return response.json({
+        received: true,
+        matched: true,
+      });
+    }
+
+    if (isClosedEvent(normalizedEvent)) {
+      await prisma.contractSigner.updateMany({
+        where: {
+          contractId: contract.id,
+          status: {
+            not: "SIGNED",
+          },
+        },
+        data: {
+          status: "SIGNED",
+          signedAt: new Date(),
+        },
+      });
+
+      await prisma.contract.update({
+        where: {
+          id: contract.id,
+        },
+        data: {
+          signatureStatus: "SIGNED",
+          signedAt: new Date(),
+          signatureError: null,
+        },
+      });
+
+      return response.json({
+        received: true,
+        matched: true,
+      });
+    }
+
+    if (isSignedEvent(normalizedEvent) && signerId) {
       await prisma.contractSigner.updateMany({
         where: {
           contractId: contract.id,
@@ -113,53 +253,6 @@ export class ClicksignWebhookController {
       });
     }
 
-    if (normalizedEvent.includes("refusal")) {
-      await prisma.contract.update({
-        where: {
-          id: contract.id,
-        },
-        data: {
-          signatureStatus: "REFUSED",
-        },
-      });
-
-      if (signerId) {
-        await prisma.contractSigner.updateMany({
-          where: {
-            contractId: contract.id,
-            clicksignSignerId: String(signerId),
-          },
-          data: {
-            status: "REFUSED",
-          },
-        });
-      }
-
-      return response.json({
-        received: true,
-        matched: true,
-      });
-    }
-
-    if (
-      normalizedEvent.includes("cancel") ||
-      normalizedEvent.includes("deadline")
-    ) {
-      await prisma.contract.update({
-        where: {
-          id: contract.id,
-        },
-        data: {
-          signatureStatus: "CANCELLED",
-        },
-      });
-
-      return response.json({
-        received: true,
-        matched: true,
-      });
-    }
-
     const signers = await prisma.contractSigner.findMany({
       where: {
         contractId: contract.id,
@@ -167,10 +260,25 @@ export class ClicksignWebhookController {
     });
 
     const signedCount = signers.filter(
-      (signer) => signer.status === "SIGNED",
+      (signer: { status: string; }) => signer.status === "SIGNED",
     ).length;
 
-    if (signers.length > 0 && signedCount === signers.length) {
+    const hasProblem = signers.some((signer: { status: string; }) =>
+      ["ACTION_REQUIRED", "AUTHENTICATION_FAILED", "REFUSED", "ERROR"].includes(
+        signer.status,
+      ),
+    );
+
+    if (hasProblem) {
+      await prisma.contract.update({
+        where: {
+          id: contract.id,
+        },
+        data: {
+          signatureStatus: "ACTION_REQUIRED",
+        },
+      });
+    } else if (signers.length > 0 && signedCount === signers.length) {
       await prisma.contract.update({
         where: {
           id: contract.id,
@@ -178,6 +286,7 @@ export class ClicksignWebhookController {
         data: {
           signatureStatus: "SIGNED",
           signedAt: new Date(),
+          signatureError: null,
         },
       });
     } else if (signedCount > 0) {
@@ -187,22 +296,6 @@ export class ClicksignWebhookController {
         },
         data: {
           signatureStatus: "PARTIALLY_SIGNED",
-        },
-      });
-    }
-
-    if (
-      normalizedEvent.includes("close") ||
-      normalizedEvent.includes("auto_close") ||
-      normalizedEvent.includes("document_closed")
-    ) {
-      await prisma.contract.update({
-        where: {
-          id: contract.id,
-        },
-        data: {
-          signatureStatus: "SIGNED",
-          signedAt: new Date(),
         },
       });
     }

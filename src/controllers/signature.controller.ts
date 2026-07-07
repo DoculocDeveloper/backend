@@ -33,4 +33,53 @@ export class SignatureController {
 
     return response.json(result);
   }
+
+  async resendNotification(request: Request, response: Response) {
+    const params = contractParamsSchema.parse(request.params);
+
+    const contract = await signatureService.resendSignatureNotification({
+      contractId: params.id,
+    });
+
+    return response.json({
+      contract,
+    });
+  }
+
+  async cancel(request: Request, response: Response) {
+    const params = contractParamsSchema.parse(request.params);
+
+    const contract = await signatureService.cancelSignature({
+      contractId: params.id,
+    });
+
+    return response.json({
+      contract,
+    });
+  }
+
+  async restart(request: Request, response: Response) {
+    const params = contractParamsSchema.parse(request.params);
+
+    const contract = await signatureService.restartSignature({
+      contractId: params.id,
+      adminId: request.user!.id,
+    });
+
+    return response.json({
+      contract,
+    });
+  }
+
+  async reopenContractData(request: Request, response: Response) {
+    const params = contractParamsSchema.parse(request.params);
+
+    const contract = await signatureService.reopenContractData({
+      contractId: params.id,
+    });
+
+    return response.json({
+      contract,
+    });
+  }
 }

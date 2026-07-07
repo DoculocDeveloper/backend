@@ -153,9 +153,14 @@ export class SignatureService {
 
     if (
       contract.signatureStatus === "SENT" ||
-      contract.signatureStatus === "PARTIALLY_SIGNED"
+      contract.signatureStatus === "PARTIALLY_SIGNED" ||
+      contract.signatureStatus === "ACTION_REQUIRED" ||
+      contract.signatureStatus === "ENVELOPE_CREATED"
     ) {
-      throw new AppError(400, "Este contrato já foi enviado para assinatura.");
+      throw new AppError(
+        400,
+        "Este contrato já possui um fluxo de assinatura em andamento. Use a opção de refazer envio.",
+      );
     }
 
     if (!contract.fileName) {
@@ -396,5 +401,242 @@ export class SignatureService {
       contract,
       signers: contract.signers,
     };
+  }
+
+  async resendSignatureNotification(params: { contractId: string }) {
+    const contract = await prisma.contract.findUnique({
+      where: {
+        id: params.contractId,
+      },
+    });
+
+    if (!contract) {
+      throw new AppError(404, "Contrato não encontrado");
+    }
+
+    if (!contract.clicksignEnvelopeId) {
+      throw new AppError(
+        400,
+        "Contrato ainda não foi enviado para assinatura.",
+      );
+    }
+
+    if (contract.signatureStatus === "SIGNED") {
+      throw new AppError(400, "Contrato já assinado.");
+    }
+
+    if (contract.signatureStatus === "CANCELLED") {
+      throw new AppError(
+        400,
+        "A assinatura está cancelada. Use a opção de refazer envio.",
+      );
+    }
+
+    await clicksignClient.notifyEnvelope({
+      envelopeId: contract.clicksignEnvelopeId,
+      message:
+        "Você recebeu uma nova notificação para assinatura do contrato Doculoc.",
+    });
+
+    return prisma.contract.findUnique({
+      where: {
+        id: contract.id,
+      },
+      include: {
+        signers: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
+      },
+    });
+  }
+
+  async cancelSignature(params: { contractId: string }) {
+    const contract = await prisma.contract.findUnique({
+      where: {
+        id: params.contractId,
+      },
+    });
+
+    if (!contract) {
+      throw new AppError(404, "Contrato não encontrado");
+    }
+
+    if (contract.signatureStatus === "SIGNED") {
+      throw new AppError(400, "Contrato já assinado e não pode ser cancelado.");
+    }
+
+    if (contract.clicksignEnvelopeId && contract.clicksignDocumentId) {
+      try {
+        await clicksignClient.cancelDocument({
+          envelopeId: contract.clicksignEnvelopeId,
+          documentId: contract.clicksignDocumentId,
+        });
+      } catch (error) {
+        console.error("[CLICKSIGN_CANCEL_DOCUMENT_ERROR]", error);
+      }
+    }
+
+    await prisma.contractSigner.updateMany({
+      where: {
+        contractId: contract.id,
+        status: {
+          not: "SIGNED",
+        },
+      },
+      data: {
+        status: "CANCELLED",
+      },
+    });
+
+    return prisma.contract.update({
+      where: {
+        id: contract.id,
+      },
+      data: {
+        signatureStatus: "CANCELLED",
+        signatureError: "Assinatura cancelada manualmente pelo administrador.",
+      },
+      include: {
+        signers: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
+      },
+    });
+  }
+
+  async restartSignature(params: { contractId: string; adminId: string }) {
+    const contract = await prisma.contract.findUnique({
+      where: {
+        id: params.contractId,
+      },
+    });
+
+    if (!contract) {
+      throw new AppError(404, "Contrato não encontrado");
+    }
+
+    if (contract.signatureStatus === "SIGNED") {
+      throw new AppError(400, "Contrato já assinado e não pode ser reenviado.");
+    }
+
+    if (contract.clicksignEnvelopeId && contract.clicksignDocumentId) {
+      try {
+        await clicksignClient.cancelDocument({
+          envelopeId: contract.clicksignEnvelopeId,
+          documentId: contract.clicksignDocumentId,
+        });
+      } catch (error) {
+        console.error("[CLICKSIGN_RESTART_CANCEL_ERROR]", error);
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.contractSigner.deleteMany({
+        where: {
+          contractId: contract.id,
+        },
+      });
+
+      await tx.contract.update({
+        where: {
+          id: contract.id,
+        },
+        data: {
+          clicksignEnvelopeId: null,
+          clicksignDocumentId: null,
+          signatureStatus: "NOT_SENT",
+          signatureError: null,
+          sentToSignatureAt: null,
+          signedAt: null,
+        },
+      });
+    });
+
+    return this.sendContractToSignature({
+      contractId: contract.id,
+      adminId: params.adminId,
+    });
+  }
+
+  async reopenContractData(params: { contractId: string }) {
+    const contract = await prisma.contract.findUnique({
+      where: {
+        id: params.contractId,
+      },
+      include: {
+        application: true,
+      },
+    });
+
+    if (!contract) {
+      throw new AppError(404, "Contrato não encontrado");
+    }
+
+    if (contract.signatureStatus === "SIGNED") {
+      throw new AppError(
+        400,
+        "Contrato já assinado e não pode ter dados reabertos.",
+      );
+    }
+
+    if (contract.clicksignEnvelopeId && contract.clicksignDocumentId) {
+      try {
+        await clicksignClient.cancelDocument({
+          envelopeId: contract.clicksignEnvelopeId,
+          documentId: contract.clicksignDocumentId,
+        });
+      } catch (error) {
+        console.error("[CLICKSIGN_REOPEN_CANCEL_ERROR]", error);
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.contractSigner.deleteMany({
+        where: {
+          contractId: contract.id,
+        },
+      });
+
+      await tx.contract.update({
+        where: {
+          id: contract.id,
+        },
+        data: {
+          status: "PENDING",
+          clicksignEnvelopeId: null,
+          clicksignDocumentId: null,
+          signatureStatus: "NOT_SENT",
+          signatureError: null,
+          sentToSignatureAt: null,
+          signedAt: null,
+        },
+      });
+
+      await tx.rentalApplication.update({
+        where: {
+          id: contract.applicationId,
+        },
+        data: {
+          status: "WAITING_CONTRACT_DATA",
+        },
+      });
+    });
+
+    return prisma.contract.findUnique({
+      where: {
+        id: contract.id,
+      },
+      include: {
+        signers: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
+      },
+    });
   }
 }
