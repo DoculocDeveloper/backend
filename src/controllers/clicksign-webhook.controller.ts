@@ -16,8 +16,11 @@ function getEventName(body: any) {
 function getEnvelopeId(body: any) {
   return (
     body?.envelope?.id ??
+    body?.envelope?.key ??
     body?.event?.data?.envelope?.id ??
+    body?.event?.data?.envelope?.key ??
     body?.event?.data?.envelope_id ??
+    body?.event?.data?.envelope_key ??
     body?.data?.relationships?.envelope?.data?.id ??
     body?.data?.attributes?.envelope_id ??
     body?.data?.attributes?.envelope?.id ??
@@ -29,8 +32,11 @@ function getEnvelopeId(body: any) {
 function getDocumentId(body: any) {
   return (
     body?.document?.id ??
+    body?.document?.key ??
     body?.event?.data?.document?.id ??
+    body?.event?.data?.document?.key ??
     body?.event?.data?.document_id ??
+    body?.event?.data?.document_key ??
     body?.data?.relationships?.document?.data?.id ??
     body?.data?.attributes?.document_id ??
     body?.data?.attributes?.document?.id ??
@@ -42,13 +48,28 @@ function getDocumentId(body: any) {
 function getSignerId(body: any) {
   return (
     body?.signer?.id ??
+    body?.signer?.key ??
     body?.event?.data?.signer?.id ??
+    body?.event?.data?.signer?.key ??
     body?.event?.data?.signer_id ??
+    body?.event?.data?.signer_key ??
     body?.data?.relationships?.signer?.data?.id ??
     body?.data?.relationships?.signers?.data?.id ??
     body?.data?.attributes?.signer_id ??
     body?.data?.attributes?.signer?.id ??
     body?.data?.signer_id ??
+    null
+  );
+}
+
+function getContractIdFromMetadata(body: any) {
+  return (
+    body?.document?.metadata?.contractId ??
+    body?.document?.metadata?.contract_id ??
+    body?.event?.data?.document?.metadata?.contractId ??
+    body?.event?.data?.document?.metadata?.contract_id ??
+    body?.data?.attributes?.metadata?.contractId ??
+    body?.data?.attributes?.metadata?.contract_id ??
     null
   );
 }
@@ -124,23 +145,50 @@ export class ClicksignWebhookController {
     const documentId = getDocumentId(body);
     const signerId = getSignerId(body);
 
-    const contract = envelopeId
-      ? await prisma.contract.findFirst({
-          where: {
-            clicksignEnvelopeId: envelopeId,
-          },
-          include: {
-            signers: true,
-          },
-        })
-      : null;
+    const metadataContractId = getContractIdFromMetadata(body);
+
+    const contractWhereConditions = [];
+
+    if (metadataContractId) {
+      contractWhereConditions.push({
+        id: String(metadataContractId),
+      });
+    }
+
+    if (envelopeId) {
+      contractWhereConditions.push({
+        clicksignEnvelopeId: String(envelopeId),
+      });
+    }
+
+    if (documentId) {
+      contractWhereConditions.push({
+        clicksignDocumentId: String(documentId),
+      });
+    }
+
+    const contract =
+      contractWhereConditions.length > 0
+        ? await prisma.contract.findFirst({
+            where: {
+              OR: contractWhereConditions,
+            },
+            include: {
+              signers: true,
+            },
+          })
+        : null;
 
     await prisma.clicksignWebhookEvent.create({
       data: {
-        contractId: contract?.id,
+        contractId: contract?.id ?? null,
         eventName: eventName ? String(eventName) : null,
-        clicksignEnvelopeId: envelopeId ? String(envelopeId) : null,
-        clicksignDocumentId: documentId ? String(documentId) : null,
+        clicksignEnvelopeId: envelopeId
+          ? String(envelopeId)
+          : (contract?.clicksignEnvelopeId ?? null),
+        clicksignDocumentId: documentId
+          ? String(documentId)
+          : (contract?.clicksignDocumentId ?? null),
         clicksignSignerId: signerId ? String(signerId) : null,
         payload: JSON.stringify(body),
       },
