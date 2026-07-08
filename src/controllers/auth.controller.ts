@@ -53,7 +53,7 @@ export class AuthController {
     });
 
     if (emailAlreadyUsed) {
-      throw new AppError(409, "Email já cadastrado");
+      throw new AppError(409, "Este e-mail já está cadastrado.", "EMAIL_ALREADY_USED");
     }
 
     if (realEstateProfile?.cnpj) {
@@ -62,7 +62,7 @@ export class AuthController {
       });
 
       if (cnpjAlreadyUsed) {
-        throw new AppError(409, "CNPJ já cadastrado");
+        throw new AppError(409, "Este CNPJ já está cadastrado.", "CNPJ_ALREADY_USED");
       }
     }
 
