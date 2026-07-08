@@ -16,8 +16,11 @@ function getEventName(body: any) {
 function getEnvelopeId(body: any) {
   return (
     body?.envelope?.id ??
+    body?.event?.data?.envelope?.id ??
+    body?.event?.data?.envelope_id ??
     body?.data?.relationships?.envelope?.data?.id ??
     body?.data?.attributes?.envelope_id ??
+    body?.data?.attributes?.envelope?.id ??
     body?.data?.envelope_id ??
     null
   );
@@ -26,8 +29,11 @@ function getEnvelopeId(body: any) {
 function getDocumentId(body: any) {
   return (
     body?.document?.id ??
+    body?.event?.data?.document?.id ??
+    body?.event?.data?.document_id ??
     body?.data?.relationships?.document?.data?.id ??
     body?.data?.attributes?.document_id ??
+    body?.data?.attributes?.document?.id ??
     body?.data?.document_id ??
     null
   );
@@ -36,8 +42,12 @@ function getDocumentId(body: any) {
 function getSignerId(body: any) {
   return (
     body?.signer?.id ??
+    body?.event?.data?.signer?.id ??
+    body?.event?.data?.signer_id ??
     body?.data?.relationships?.signer?.data?.id ??
+    body?.data?.relationships?.signers?.data?.id ??
     body?.data?.attributes?.signer_id ??
+    body?.data?.attributes?.signer?.id ??
     body?.data?.signer_id ??
     null
   );
@@ -49,10 +59,13 @@ function normalizeEventName(eventName?: string | null) {
 
 function isSignedEvent(event: string) {
   return (
-    (event.includes("document_signed") ||
+    (event === "sign" ||
+      event === "signed" ||
+      event.includes("document_signed") ||
       event.includes("signer_signed") ||
-      event.includes("signature_signed") ||
-      event === "signed") &&
+      event.includes("signature_signed")) &&
+    !event.includes("request") &&
+    !event.includes("reminder") &&
     !event.includes("refused") &&
     !event.includes("failed") &&
     !event.includes("error")
@@ -141,6 +154,15 @@ export class ClicksignWebhookController {
     }
 
     const normalizedEvent = normalizeEventName(eventName);
+
+    console.log("[CLICKSIGN_WEBHOOK_MATCHED]", {
+      eventName,
+      normalizedEvent,
+      envelopeId,
+      documentId,
+      signerId,
+      contractId: contract.id,
+    });
 
     if (isActionRequiredEvent(normalizedEvent)) {
       if (signerId) {
@@ -260,10 +282,10 @@ export class ClicksignWebhookController {
     });
 
     const signedCount = signers.filter(
-      (signer: { status: string; }) => signer.status === "SIGNED",
+      (signer: { status: string }) => signer.status === "SIGNED",
     ).length;
 
-    const hasProblem = signers.some((signer: { status: string; }) =>
+    const hasProblem = signers.some((signer: { status: string }) =>
       ["ACTION_REQUIRED", "AUTHENTICATION_FAILED", "REFUSED", "ERROR"].includes(
         signer.status,
       ),

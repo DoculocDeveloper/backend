@@ -280,4 +280,27 @@ export class AuthController {
 
     return response.json({ message: "Senha redefinida com sucesso" });
   }
+
+  async me(request: Request, response: Response) {
+    const user = await prisma.user.findUnique({
+      where: {
+        id: request.user!.id,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        realEstateProfile: {
+          select: realEstateProfileSelect,
+        },
+      },
+    });
+
+    if (!user) {
+      throw new AppError(401, "Usuário não encontrado");
+    }
+
+    return response.json({ user });
+  }
 }
