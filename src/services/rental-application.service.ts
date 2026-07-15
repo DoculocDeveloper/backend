@@ -642,7 +642,12 @@ export class RentalApplicationService {
       throw new AppError(404, "Consulta em processamento não encontrada");
     }
 
-    if (params.role !== "ADMIN" && lock.requesterId !== params.requesterId) {
+    const canSeeConsultStatus =
+      params.role === "ADMIN" ||
+      params.role === "ACCOUNT_EXECUTIVE" ||
+      lock.requesterId === params.requesterId;
+
+    if (!canSeeConsultStatus) {
       throw new AppError(403, "Acesso negado");
     }
 

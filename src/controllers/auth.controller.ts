@@ -10,6 +10,7 @@ import {
   registerSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  createAccountExecutiveSchema,
 } from "../schemas/auth.schemas.js";
 
 // Utils
@@ -53,7 +54,11 @@ export class AuthController {
     });
 
     if (emailAlreadyUsed) {
-      throw new AppError(409, "Este e-mail já está cadastrado.", "EMAIL_ALREADY_USED");
+      throw new AppError(
+        409,
+        "Este e-mail já está cadastrado.",
+        "EMAIL_ALREADY_USED",
+      );
     }
 
     if (realEstateProfile?.cnpj) {
@@ -62,7 +67,11 @@ export class AuthController {
       });
 
       if (cnpjAlreadyUsed) {
-        throw new AppError(409, "Este CNPJ já está cadastrado.", "CNPJ_ALREADY_USED");
+        throw new AppError(
+          409,
+          "Este CNPJ já está cadastrado.",
+          "CNPJ_ALREADY_USED",
+        );
       }
     }
 
@@ -130,6 +139,44 @@ export class AuthController {
 
       return createdUser;
     });
+    return response.status(201).json({ user });
+  }
+
+  async createAccountExecutive(request: Request, response: Response) {
+    const input = createAccountExecutiveSchema.parse(request.body);
+
+    const emailAlreadyUsed = await prisma.user.findUnique({
+      where: {
+        email: input.email,
+      },
+    });
+
+    if (emailAlreadyUsed) {
+      throw new AppError(
+        409,
+        "Este e-mail já está cadastrado.",
+        "EMAIL_ALREADY_USED",
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(input.password, 10);
+
+    const user = await prisma.user.create({
+      data: {
+        name: input.name,
+        email: input.email,
+        passwordHash,
+        role: UserRole.ACCOUNT_EXECUTIVE,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
     return response.status(201).json({ user });
   }
 

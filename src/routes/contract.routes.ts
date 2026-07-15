@@ -39,7 +39,7 @@ contractRoutes.post(
 
 contractRoutes.get(
   "/:id/signature/status",
-  authorize(UserRole.ADMIN, UserRole.REAL_ESTATE),
+  authorize(UserRole.ADMIN, UserRole.REAL_ESTATE, UserRole.ACCOUNT_EXECUTIVE),
   asyncHandler(signatureController.status),
 );
 

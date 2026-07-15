@@ -73,3 +73,9 @@ export const resetPasswordSchema = z.object({
   path: ["passwordConfirmation"],
   message: "As senhas não conferem",
 });
+
+export const createAccountExecutiveSchema = z.object({
+  name: z.string().min(3, "Informe o nome do usuário."),
+  email: z.string().email("Informe um e-mail válido."),
+  password: z.string().min(8, "A senha deve ter pelo menos 8 caracteres."),
+});

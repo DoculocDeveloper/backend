@@ -390,10 +390,12 @@ export class SignatureService {
       throw new AppError(404, "Contrato não encontrado");
     }
 
-    const isAdmin = params.role === "ADMIN";
-    const isOwner = contract.application.requesterId === params.requesterId;
+    const canSeeSignature =
+      params.role === "ADMIN" ||
+      params.role === "ACCOUNT_EXECUTIVE" ||
+      contract.application.requesterId === params.requesterId;
 
-    if (!isAdmin && !isOwner) {
+    if (!canSeeSignature) {
       throw new AppError(403, "Acesso negado");
     }
 

@@ -72,18 +72,21 @@ export class RentalApplicationController {
   async list(request: Request, response: Response) {
     const query = listRentalApplicationsSchema.parse(request.query);
 
-    const where =
-      request.user!.role === UserRole.ADMIN
-        ? {
-            requesterId: query.requesterId,
-            status: query.status,
-            document: query.document,
-          }
-        : {
-            requesterId: request.user!.id,
-            status: query.status,
-            document: query.document,
-          };
+    const canSeeAllApplications =
+      request.user!.role === UserRole.ADMIN ||
+      request.user!.role === UserRole.ACCOUNT_EXECUTIVE;
+
+    const where = canSeeAllApplications
+      ? {
+          requesterId: query.requesterId,
+          status: query.status,
+          document: query.document,
+        }
+      : {
+          requesterId: request.user!.id,
+          status: query.status,
+          document: query.document,
+        };
 
     const [applications, total] = await Promise.all([
       prisma.rentalApplication.findMany({
@@ -205,10 +208,12 @@ export class RentalApplicationController {
       throw new AppError(404, "Consulta não encontrada");
     }
 
-    if (
-      request.user!.role !== UserRole.ADMIN &&
-      application.requesterId !== request.user!.id
-    ) {
+    const canSeeApplication =
+      request.user!.role === UserRole.ADMIN ||
+      request.user!.role === UserRole.ACCOUNT_EXECUTIVE ||
+      application.requesterId === request.user!.id;
+
+    if (!canSeeApplication) {
       throw new AppError(403, "Acesso negado");
     }
 
