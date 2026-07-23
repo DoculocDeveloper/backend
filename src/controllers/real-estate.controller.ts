@@ -71,8 +71,11 @@ export class RealEstateController {
         realEstateProfile: {
           select: {
             id: true,
+            profileType: true,
             name: true,
             cnpj: true,
+            documentType: true,
+            document: true,
             phone: true,
             responsibleName: true,
             zipCode: true,

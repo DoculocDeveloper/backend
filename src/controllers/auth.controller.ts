@@ -24,8 +24,11 @@ import { hashToken } from "../utils/hash-token.js";
 
 const realEstateProfileSelect = {
   id: true,
+  profileType: true,
   name: true,
   cnpj: true,
+  documentType: true,
+  document: true,
   phone: true,
   responsibleName: true,
 
@@ -41,6 +44,20 @@ const realEstateProfileSelect = {
   updatedAt: true,
 } as const;
 
+function onlyDigits(value?: string | null) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function getProfileDocumentType(profileType?: string) {
+  return profileType === "AUTONOMOUS_BROKER" ? "CPF" : "CNPJ";
+}
+
+function getProfileTypeLabel(profileType?: string) {
+  return profileType === "AUTONOMOUS_BROKER"
+    ? "Corretor autônomo"
+    : "Imobiliária";
+}
+
 export class AuthController {
   async register(request: Request, response: Response) {
     const { name, email, role, password, ...rest } = registerSchema.parse(
@@ -48,6 +65,12 @@ export class AuthController {
     );
     const isRealEstate = role === UserRole.REAL_ESTATE;
     const realEstateProfile = rest.realEstateProfile;
+
+    const profileType = realEstateProfile?.profileType ?? "COMPANY";
+    const documentType = getProfileDocumentType(profileType);
+    const profileDocument = onlyDigits(
+      realEstateProfile?.document ?? realEstateProfile?.cnpj,
+    );
 
     const emailAlreadyUsed = await prisma.user.findUnique({
       where: { email: email },
@@ -61,16 +84,31 @@ export class AuthController {
       );
     }
 
-    if (realEstateProfile?.cnpj) {
-      const cnpjAlreadyUsed = await prisma.realEstateProfile.findUnique({
-        where: { cnpj: realEstateProfile.cnpj },
+    if (isRealEstate) {
+      const documentAlreadyUsed = await prisma.realEstateProfile.findFirst({
+        where: {
+          OR: [
+            {
+              document: profileDocument,
+            },
+            ...(documentType === "CNPJ"
+              ? [
+                  {
+                    cnpj: profileDocument,
+                  },
+                ]
+              : []),
+          ],
+        },
       });
 
-      if (cnpjAlreadyUsed) {
+      if (documentAlreadyUsed) {
         throw new AppError(
           409,
-          "Este CNPJ já está cadastrado.",
-          "CNPJ_ALREADY_USED",
+          documentType === "CPF"
+            ? "Este CPF já está cadastrado."
+            : "Este CNPJ já está cadastrado.",
+          "DOCUMENT_ALREADY_USED",
         );
       }
     }
@@ -88,8 +126,15 @@ export class AuthController {
             ? {
                 realEstateProfile: {
                   create: {
+                    profileType,
                     name: realEstateProfile.name,
-                    cnpj: realEstateProfile.cnpj,
+
+                    documentType,
+                    document: profileDocument,
+
+                    // Mantém compatibilidade com telas antigas que ainda leem cnpj.
+                    cnpj: documentType === "CNPJ" ? profileDocument : null,
+
                     phone: realEstateProfile.phone,
                     responsibleName: realEstateProfile.responsibleName,
 
@@ -152,30 +197,31 @@ export class AuthController {
       mailService
         .send({
           to: env.NEW_REAL_ESTATE_NOTIFICATION_TO,
-          subject: "Nova imobiliária cadastrada - Doculoc",
+          subject: `${getProfileTypeLabel(profile.profileType)} cadastrado - Doculoc`,
           html: `
-        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-          <h2>Nova imobiliária cadastrada</h2>
+            <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+              <h2>${getProfileTypeLabel(profile.profileType)} cadastrado</h2>
 
-          <p>Uma nova imobiliária acabou de se cadastrar na Doculoc.</p>
+              <p>Um novo lead acabou de se cadastrar na Doculoc.</p>
 
-          <ul>
-            <li><strong>Imobiliária:</strong> ${profile.name}</li>
-            <li><strong>Responsável:</strong> ${profile.responsibleName}</li>
-            <li><strong>E-mail:</strong> ${user.email}</li>
-            <li><strong>Telefone:</strong> ${profile.phone ?? "Não informado"}</li>
-            <li><strong>CNPJ:</strong> ${profile.cnpj ?? "Não informado"}</li>
-          </ul>
+              <ul>
+                <li><strong>Tipo:</strong> ${getProfileTypeLabel(profile.profileType)}</li>
+                <li><strong>Nome:</strong> ${profile.name}</li>
+                <li><strong>Responsável:</strong> ${profile.responsibleName}</li>
+                <li><strong>E-mail:</strong> ${user.email}</li>
+                <li><strong>Telefone:</strong> ${profile.phone ?? "Não informado"}</li>
+                <li><strong>${profile.documentType === "CPF" ? "CPF" : "CNPJ"}:</strong> ${profile.document ?? profile.cnpj ?? "Não informado"}</li>
+              </ul>
 
-          <p>
-            Acesse o painel para acompanhar:
-            <br />
-            <a href="${env.APP_URL.replace(/\/$/, "")}/admin/imobiliarias">
-              Abrir tela de imobiliárias
-            </a>
-          </p>
-        </div>
-      `,
+              <p>
+                Acesse o painel para acompanhar:
+                <br />
+                <a href="${env.APP_URL.replace(/\/$/, "")}/admin/imobiliarias">
+                  Abrir tela de imobiliárias
+                </a>
+              </p>
+            </div>
+          `,
         })
         .catch((error) => {
           console.error("[NEW_REAL_ESTATE_NOTIFICATION_ERROR]", error);

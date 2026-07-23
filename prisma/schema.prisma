@@ -13,6 +13,11 @@ enum UserRole {
   ACCOUNT_EXECUTIVE
 }
 
+enum RealEstateProfileType {
+  COMPANY
+  AUTONOMOUS_BROKER
+}
+
 enum DocumentType {
   CPF
   CNPJ
@@ -152,8 +157,13 @@ model RealEstateProfile {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  name            String
-  cnpj            String? @unique
+  profileType RealEstateProfileType @default(COMPANY)
+
+  name         String
+  cnpj         String?       @unique // legado: manter por compatibilidade
+  documentType DocumentType?
+  document     String?       @unique
+
   phone           String
   responsibleName String
 
