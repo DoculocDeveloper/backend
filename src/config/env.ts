@@ -44,6 +44,7 @@ const envSchema = z.object({
   APP_URL: z.string().url().default("http://localhost:5173"),
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z.string().optional(),
+  NEW_REAL_ESTATE_NOTIFICATION_TO: z.string().email().optional(),
   PASSWORD_RESET_TOKEN_EXPIRES_MINUTES: z.coerce
     .number()
     .int()

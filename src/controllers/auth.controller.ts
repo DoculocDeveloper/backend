@@ -139,6 +139,49 @@ export class AuthController {
 
       return createdUser;
     });
+
+    if (
+      isRealEstate &&
+      user.realEstateProfile &&
+      env.NEW_REAL_ESTATE_NOTIFICATION_TO &&
+      env.RESEND_API_KEY &&
+      env.MAIL_FROM
+    ) {
+      const profile = user.realEstateProfile;
+
+      mailService
+        .send({
+          to: env.NEW_REAL_ESTATE_NOTIFICATION_TO,
+          subject: "Nova imobiliária cadastrada - Doculoc",
+          html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+          <h2>Nova imobiliária cadastrada</h2>
+
+          <p>Uma nova imobiliária acabou de se cadastrar na Doculoc.</p>
+
+          <ul>
+            <li><strong>Imobiliária:</strong> ${profile.name}</li>
+            <li><strong>Responsável:</strong> ${profile.responsibleName}</li>
+            <li><strong>E-mail:</strong> ${user.email}</li>
+            <li><strong>Telefone:</strong> ${profile.phone ?? "Não informado"}</li>
+            <li><strong>CNPJ:</strong> ${profile.cnpj ?? "Não informado"}</li>
+          </ul>
+
+          <p>
+            Acesse o painel para acompanhar:
+            <br />
+            <a href="${env.APP_URL.replace(/\/$/, "")}/admin/imobiliarias">
+              Abrir tela de imobiliárias
+            </a>
+          </p>
+        </div>
+      `,
+        })
+        .catch((error) => {
+          console.error("[NEW_REAL_ESTATE_NOTIFICATION_ERROR]", error);
+        });
+    }
+
     return response.status(201).json({ user });
   }
 
