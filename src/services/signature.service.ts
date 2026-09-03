@@ -83,6 +83,9 @@ export class SignatureService {
       });
     }
 
+    const realEstateSignerDocument =
+      realEstateProfile?.document ?? realEstateProfile?.cnpj ?? null;
+
     const realEstateSigner: PreparedSigner = {
       role: "REAL_ESTATE",
       name:
@@ -91,7 +94,7 @@ export class SignatureService {
         application.requester.name,
       email: application.requester.email,
       phone: realEstateProfile?.phone,
-      document: realEstateProfile?.cnpj,
+      document: realEstateSignerDocument,
     };
 
     const doculocSigner: PreparedSigner = {

@@ -76,16 +76,89 @@ export class RentalApplicationController {
       request.user!.role === UserRole.ADMIN ||
       request.user!.role === UserRole.ACCOUNT_EXECUTIVE;
 
+    const search = query.search?.trim();
+    const searchDigits = search?.replace(/\D/g, "");
+
+    const searchFilter = search
+      ? {
+          OR: [
+            ...(searchDigits
+              ? [
+                  {
+                    document: {
+                      contains: searchDigits,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                  {
+                    tenantDocument: {
+                      contains: searchDigits,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                ]
+              : []),
+
+            {
+              tenantName: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
+            },
+            {
+              tenantEmail: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
+            },
+            {
+              requester: {
+                is: {
+                  name: {
+                    contains: search,
+                    mode: "insensitive" as const,
+                  },
+                },
+              },
+            },
+            {
+              requester: {
+                is: {
+                  email: {
+                    contains: search,
+                    mode: "insensitive" as const,
+                  },
+                },
+              },
+            },
+            {
+              requester: {
+                is: {
+                  realEstateProfile: {
+                    is: {
+                      name: {
+                        contains: search,
+                        mode: "insensitive" as const,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        }
+      : {};
+
     const where = canSeeAllApplications
       ? {
           requesterId: query.requesterId,
           status: query.status,
-          document: query.document,
+          ...searchFilter,
         }
       : {
           requesterId: request.user!.id,
           status: query.status,
-          document: query.document,
+          ...searchFilter,
         };
 
     const [applications, total] = await Promise.all([
@@ -105,10 +178,20 @@ export class RentalApplicationController {
               realEstateProfile: {
                 select: {
                   id: true,
+                  profileType: true,
                   name: true,
                   cnpj: true,
+                  documentType: true,
+                  document: true,
                   phone: true,
                   responsibleName: true,
+                  zipCode: true,
+                  street: true,
+                  number: true,
+                  complement: true,
+                  neighborhood: true,
+                  city: true,
+                  state: true,
                 },
               },
             },
@@ -178,10 +261,20 @@ export class RentalApplicationController {
             realEstateProfile: {
               select: {
                 id: true,
+                profileType: true,
                 name: true,
                 cnpj: true,
+                documentType: true,
+                document: true,
                 phone: true,
                 responsibleName: true,
+                zipCode: true,
+                street: true,
+                number: true,
+                complement: true,
+                neighborhood: true,
+                city: true,
+                state: true,
               },
             },
           },

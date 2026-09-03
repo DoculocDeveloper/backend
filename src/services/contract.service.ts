@@ -33,6 +33,140 @@ function formatCurrency(value: unknown) {
   }).format(numberValue);
 }
 
+function onlyDigits(value?: string | null) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function formatCpf(value?: string | null) {
+  const digits = onlyDigits(value);
+
+  if (digits.length !== 11) return value ?? "";
+
+  return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+}
+
+function formatCnpj(value?: string | null) {
+  const digits = onlyDigits(value);
+
+  if (digits.length !== 14) return value ?? "";
+
+  return digits.replace(
+    /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+    "$1.$2.$3/$4-$5",
+  );
+}
+
+function formatPartnerDocument(params: {
+  document?: string | null;
+  documentType?: string | null;
+}) {
+  if (params.documentType === "CPF") {
+    return formatCpf(params.document);
+  }
+
+  if (params.documentType === "CNPJ") {
+    return formatCnpj(params.document);
+  }
+
+  const digits = onlyDigits(params.document);
+
+  if (digits.length === 11) return formatCpf(digits);
+  if (digits.length === 14) return formatCnpj(digits);
+
+  return params.document ?? "";
+}
+
+function buildPartnerContractData(params: {
+  requester: {
+    name: string;
+    email: string;
+    realEstateProfile?: {
+      profileType?: string | null;
+      name?: string | null;
+      cnpj?: string | null;
+      documentType?: string | null;
+      document?: string | null;
+      phone?: string | null;
+      responsibleName?: string | null;
+      zipCode?: string | null;
+      street?: string | null;
+      number?: string | null;
+      complement?: string | null;
+      neighborhood?: string | null;
+      city?: string | null;
+      state?: string | null;
+    } | null;
+  };
+}) {
+  const profile = params.requester.realEstateProfile;
+
+  const isAutonomousBroker = profile?.profileType === "AUTONOMOUS_BROKER";
+
+  const documentType = isAutonomousBroker ? "CPF" : "CNPJ";
+
+  const rawDocument = profile?.document ?? profile?.cnpj ?? "";
+
+  const formattedDocument = formatPartnerDocument({
+    document: rawDocument,
+    documentType: profile?.documentType ?? documentType,
+  });
+
+  const partnerName = profile?.name ?? params.requester.name;
+
+  const responsibleName = profile?.responsibleName ?? params.requester.name;
+
+  const addressLine = [
+    profile?.street,
+    profile?.number ? `nº ${profile.number}` : null,
+    profile?.complement,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const cityLine = [
+    profile?.neighborhood ? `bairro ${profile.neighborhood}` : null,
+    profile?.city,
+    profile?.state,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return {
+    isAutonomousBroker,
+
+    partnerType: isAutonomousBroker ? "AUTONOMOUS_BROKER" : "COMPANY",
+
+    partnerTypeLabel: isAutonomousBroker ? "Corretor autônomo" : "Imobiliária",
+
+    partnerSectionTitle: isAutonomousBroker
+      ? "DADOS DO CORRETOR AUTÔNOMO"
+      : "DADOS DA IMOBILIÁRIA",
+
+    partnerSignatureLabel: isAutonomousBroker
+      ? "CORRETOR(A) AUTÔNOMO(A)"
+      : "ADMINISTRADOR(A) / IMOBILIÁRIA",
+
+    partnerName,
+    partnerEmail: params.requester.email,
+    partnerPhone: profile?.phone ?? "",
+    partnerResponsibleName: responsibleName,
+
+    partnerDocumentLabel: documentType,
+    partnerDocument: formattedDocument,
+
+    partnerZipCode: profile?.zipCode ?? "",
+    partnerStreet: profile?.street ?? "",
+    partnerNumber: profile?.number ?? "",
+    partnerComplement: profile?.complement ?? "",
+    partnerNeighborhood: profile?.neighborhood ?? "",
+    partnerCity: profile?.city ?? "",
+    partnerState: profile?.state ?? "",
+
+    partnerAddressLine: addressLine,
+    partnerCityLine: cityLine,
+  };
+}
+
 function assertContractDataIsComplete(application: any) {
   const requiredFields = [
     "propertyZipCode",
@@ -118,7 +252,10 @@ export class ContractService {
 
     const packageValue = toNumber(application.requestedExpense);
     const monthlyServiceFee = packageValue * 0.1;
-    const realEstateProfile = application.requester.realEstateProfile;
+
+    const partner = buildPartnerContractData({
+      requester: application.requester,
+    });
 
     const tenants =
       application.tenants.length > 0
@@ -144,24 +281,6 @@ export class ContractService {
     const mainTenant = tenants[0];
 
     try {
-      const realEstateAddressLine = [
-        realEstateProfile?.street,
-        realEstateProfile?.number ? `nº ${realEstateProfile.number}` : null,
-        realEstateProfile?.complement,
-      ]
-        .filter(Boolean)
-        .join(", ");
-
-      const realEstateCityLine = [
-        realEstateProfile?.neighborhood
-          ? `bairro ${realEstateProfile.neighborhood}`
-          : null,
-        realEstateProfile?.city,
-        realEstateProfile?.state,
-      ]
-        .filter(Boolean)
-        .join(", ");
-
       doc.render({
         tenantName: mainTenant.name,
         tenantDocument: mainTenant.document,
@@ -186,22 +305,45 @@ export class ContractService {
 
         monthlyServiceFee: formatCurrency(monthlyServiceFee),
 
-        realEstateName: realEstateProfile?.name ?? application.requester.name,
-        realEstateEmail: application.requester.email,
-        realEstateCnpj: realEstateProfile?.cnpj ?? "",
-        realEstatePhone: realEstateProfile?.phone ?? "",
-        realEstateResponsibleName:
-          realEstateProfile?.responsibleName ?? application.requester.name,
-        realEstateZipCode: realEstateProfile?.zipCode ?? "",
-        realEstateStreet: realEstateProfile?.street ?? "",
-        realEstateNumber: realEstateProfile?.number ?? "",
-        realEstateComplement: realEstateProfile?.complement ?? "",
-        realEstateNeighborhood: realEstateProfile?.neighborhood ?? "",
-        realEstateCity: realEstateProfile?.city ?? "",
-        realEstateState: realEstateProfile?.state ?? "",
+        partnerType: partner.partnerType,
+        partnerTypeLabel: partner.partnerTypeLabel,
+        partnerSectionTitle: partner.partnerSectionTitle,
+        partnerSignatureLabel: partner.partnerSignatureLabel,
 
-        realEstateAddressLine,
-        realEstateCityLine,
+        partnerName: partner.partnerName,
+        partnerEmail: partner.partnerEmail,
+        partnerPhone: partner.partnerPhone,
+        partnerResponsibleName: partner.partnerResponsibleName,
+        partnerDocumentLabel: partner.partnerDocumentLabel,
+        partnerDocument: partner.partnerDocument,
+
+        partnerZipCode: partner.partnerZipCode,
+        partnerStreet: partner.partnerStreet,
+        partnerNumber: partner.partnerNumber,
+        partnerComplement: partner.partnerComplement,
+        partnerNeighborhood: partner.partnerNeighborhood,
+        partnerCity: partner.partnerCity,
+        partnerState: partner.partnerState,
+
+        partnerAddressLine: partner.partnerAddressLine,
+        partnerCityLine: partner.partnerCityLine,
+
+        // Compatibilidade com o template antigo
+        realEstateName: partner.partnerName,
+        realEstateEmail: partner.partnerEmail,
+        realEstateCnpj: partner.partnerDocument,
+        realEstatePhone: partner.partnerPhone,
+        realEstateResponsibleName: partner.partnerResponsibleName,
+        realEstateZipCode: partner.partnerZipCode,
+        realEstateStreet: partner.partnerStreet,
+        realEstateNumber: partner.partnerNumber,
+        realEstateComplement: partner.partnerComplement,
+        realEstateNeighborhood: partner.partnerNeighborhood,
+        realEstateCity: partner.partnerCity,
+        realEstateState: partner.partnerState,
+
+        realEstateAddressLine: partner.partnerAddressLine,
+        realEstateCityLine: partner.partnerCityLine,
 
         generatedAt: new Intl.DateTimeFormat("pt-BR").format(new Date()),
       });

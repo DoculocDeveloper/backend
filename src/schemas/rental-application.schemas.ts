@@ -93,7 +93,7 @@ export const adminDecisionSchema = z.object({
 export const listRentalApplicationsSchema = z.object({
   requesterId: z.string().uuid().optional(),
   status: rentalApplicationStatusSchema.optional(),
-  document: z.string().optional(),
+  search: z.string().trim().optional(),
   page: z.coerce.number().int().positive().default(1),
   perPage: z.coerce.number().int().positive().max(100).default(25),
 });
