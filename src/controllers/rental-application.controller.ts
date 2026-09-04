@@ -96,6 +96,16 @@ export class RentalApplicationController {
                       mode: "insensitive" as const,
                     },
                   },
+                  {
+                    tenants: {
+                      some: {
+                        document: {
+                          contains: searchDigits,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                    },
+                  },
                 ]
               : []),
 
@@ -109,6 +119,26 @@ export class RentalApplicationController {
               tenantEmail: {
                 contains: search,
                 mode: "insensitive" as const,
+              },
+            },
+            {
+              tenants: {
+                some: {
+                  name: {
+                    contains: search,
+                    mode: "insensitive" as const,
+                  },
+                },
+              },
+            },
+            {
+              tenants: {
+                some: {
+                  email: {
+                    contains: search,
+                    mode: "insensitive" as const,
+                  },
+                },
               },
             },
             {

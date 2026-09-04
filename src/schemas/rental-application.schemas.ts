@@ -3,6 +3,19 @@ import { z } from "zod";
 
 import { cpfSchema, cnpjSchema } from "./document.schemas.js";
 
+const roundCurrency = (value: number) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
+
+const currencyValueSchema = z.coerce
+  .number()
+  .nonnegative()
+  .transform(roundCurrency);
+
+const positiveCurrencyValueSchema = currencyValueSchema.refine(
+  (value) => value > 0,
+  "O valor do aluguel não pode ser negativo ou zero",
+);
+
 export const rentalApplicationStatusSchema = z.enum([
   "CONSULTED",
   "WAITING_CONTRACT_DATA",
@@ -20,17 +33,17 @@ export const createRentalApplicationByCpfSchema = z.object({
   phone: z.string().optional(),
   selfie: z.string().optional(),
 
-  rentValue: z.coerce.number().positive("O valor do aluguel não pode ser negativo ou zero"),
-  condominiumValue: z.coerce.number().min(0, "O valor do condomínio não pode ser negativo"),
-  feesValue: z.coerce.number().min(0, "O valor do IPTU não pode ser negativo"),
+  rentValue: positiveCurrencyValueSchema,
+  condominiumValue: currencyValueSchema,
+  feesValue: currencyValueSchema,
 });
 
 export const createRentalApplicationByCnpjSchema = z.object({
   cnpj: cnpjSchema,
 
-  rentValue: z.coerce.number().positive("O valor do aluguel não pode ser negativo ou zero"),
-  condominiumValue: z.coerce.number().min(0, "O valor do condomínio não pode ser negativo"),
-  feesValue: z.coerce.number().min(0, "O valor do IPTU não pode ser negativo"),
+  rentValue: positiveCurrencyValueSchema,
+  condominiumValue: currencyValueSchema,
+  feesValue: currencyValueSchema,
 });
 
 export const rentalApplicationParamsSchema = z.object({
@@ -38,9 +51,9 @@ export const rentalApplicationParamsSchema = z.object({
 });
 
 export const updateRentalValuesSchema = z.object({
-  rentValue: z.coerce.number().positive("O valor do aluguel deve ser maior que zero"),
-  condominiumValue: z.coerce.number().min(0, "O valor do condomínio não pode ser negativo"),
-  feesValue: z.coerce.number().min(0, "O valor do IPTU não pode ser negativo"),
+  rentValue: positiveCurrencyValueSchema,
+  condominiumValue: currencyValueSchema,
+  feesValue: currencyValueSchema,
 });
 
 const digitsOnly = (value: unknown) =>
@@ -70,15 +83,27 @@ export const fillContractDataSchema = z.object({
     .min(1, "Informe pelo menos 1 locatário")
     .max(3, "É permitido informar no máximo 3 locatários"),
 
-  propertyZipCode: z.string().min(8, "O CEP da propriedade deve conter pelo menos 8 caracteres"),
-  propertyStreet: z.string().min(3, "A rua da propriedade deve conter pelo menos 3 caracteres"),
-  propertyNumber: z.string().min(1, "O número da propriedade deve conter pelo menos 1 caractere"),
+  propertyZipCode: z
+    .string()
+    .min(8, "O CEP da propriedade deve conter pelo menos 8 caracteres"),
+  propertyStreet: z
+    .string()
+    .min(3, "A rua da propriedade deve conter pelo menos 3 caracteres"),
+  propertyNumber: z
+    .string()
+    .min(1, "O número da propriedade deve conter pelo menos 1 caractere"),
   propertyComplement: z.string().optional(),
-  propertyNeighborhood: z.string().min(2, "O bairro da propriedade deve conter pelo menos 2 caracteres"),
-  propertyCity: z.string().min(2, "A cidade da propriedade deve conter pelo menos 2 caracteres"),
-  propertyState: z.string().length(2, "O estado da propriedade deve conter exatamente 2 caracteres"),
+  propertyNeighborhood: z
+    .string()
+    .min(2, "O bairro da propriedade deve conter pelo menos 2 caracteres"),
+  propertyCity: z
+    .string()
+    .min(2, "A cidade da propriedade deve conter pelo menos 2 caracteres"),
+  propertyState: z
+    .string()
+    .length(2, "O estado da propriedade deve conter exatamente 2 caracteres"),
 
-  adhesionFee: z.coerce.number().min(0, "O valor da taxas de adesão não pode ser negativo")
+  adhesionFee: currencyValueSchema,
 });
 
 export const contestRentalApplicationSchema = z.object({
@@ -87,7 +112,10 @@ export const contestRentalApplicationSchema = z.object({
 
 export const adminDecisionSchema = z.object({
   decision: z.enum(["APPROVED", "REJECTED"]),
-  reason: z.string().min(3, "O motivo deve conter pelo menos 3 caracteres").optional(),
+  reason: z
+    .string()
+    .min(3, "O motivo deve conter pelo menos 3 caracteres")
+    .optional(),
 });
 
 export const listRentalApplicationsSchema = z.object({
