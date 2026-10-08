@@ -13,7 +13,8 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin: env.CORS_ORIGIN ?? "*",
+    origin: true,
+    credentials: true,
     exposedHeaders: ["Content-Disposition"],
   }),
 );
