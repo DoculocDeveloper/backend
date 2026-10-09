@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
+import { z } from "zod";
 
 import { UserRole } from "../domain/roles.js";
 import { prisma } from "../lib/prisma.js";
+import { AppError } from "../middlewares/error-handler.js";
 
 export class RealEstateController {
   async list(request: Request, response: Response) {
@@ -78,6 +80,7 @@ export class RealEstateController {
             document: true,
             phone: true,
             responsibleName: true,
+            signatureEmail: true,
             zipCode: true,
             street: true,
             number: true,
@@ -116,4 +119,57 @@ export class RealEstateController {
       })),
     });
   }
+
+  async getProfile(request: Request, response: Response) {
+    const userId = request.user!.id;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        realEstateProfile: true,
+      },
+    });
+
+    if (!user) {
+      throw new AppError(404, "Usuário não encontrado");
+    }
+
+    return response.json({
+      user,
+      profile: user.realEstateProfile,
+    });
+  }
+
+  async updateProfile(request: Request, response: Response) {
+    const userId = request.user!.id;
+
+    const bodySchema = z.object({
+      signatureEmail: z
+        .string()
+        .email("Informe um e-mail válido.")
+        .nullable()
+        .optional()
+        .or(z.literal("")),
+    });
+
+    const parsed = bodySchema.parse(request.body);
+    const normalizedEmail = parsed.signatureEmail?.trim() || null;
+
+    const profile = await prisma.realEstateProfile.update({
+      where: { userId },
+      data: {
+        signatureEmail: normalizedEmail,
+      },
+    });
+
+    return response.json({
+      message: "Configurações atualizadas com sucesso.",
+      profile,
+    });
+  }
 }
+

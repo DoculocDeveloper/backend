@@ -16,4 +16,16 @@ realEstateRoutes.get(
   asyncHandler(realEstateController.list),
 );
 
+realEstateRoutes.get(
+  "/profile",
+  authorize(UserRole.REAL_ESTATE),
+  asyncHandler(realEstateController.getProfile),
+);
+
+realEstateRoutes.patch(
+  "/profile",
+  authorize(UserRole.REAL_ESTATE),
+  asyncHandler(realEstateController.updateProfile),
+);
+
 export { realEstateRoutes };

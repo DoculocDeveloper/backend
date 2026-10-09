@@ -166,6 +166,7 @@ model RealEstateProfile {
 
   phone           String
   responsibleName String
+  signatureEmail  String?
 
   zipCode      String?
   street       String?

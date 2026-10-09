@@ -88,6 +88,7 @@ function buildPartnerContractData(params: {
       document?: string | null;
       phone?: string | null;
       responsibleName?: string | null;
+      signatureEmail?: string | null;
       zipCode?: string | null;
       street?: string | null;
       number?: string | null;
@@ -147,7 +148,8 @@ function buildPartnerContractData(params: {
       : "ADMINISTRADOR(A) / IMOBILIÁRIA",
 
     partnerName,
-    partnerEmail: params.requester.email,
+    partnerEmail:
+      profile?.signatureEmail?.trim() || params.requester.email,
     partnerPhone: profile?.phone ?? "",
     partnerResponsibleName: responsibleName,
 

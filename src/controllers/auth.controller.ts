@@ -31,6 +31,7 @@ const realEstateProfileSelect = {
   document: true,
   phone: true,
   responsibleName: true,
+  signatureEmail: true,
 
   zipCode: true,
   street: true,

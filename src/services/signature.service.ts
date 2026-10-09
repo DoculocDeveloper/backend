@@ -86,13 +86,16 @@ export class SignatureService {
     const realEstateSignerDocument =
       realEstateProfile?.document ?? realEstateProfile?.cnpj ?? null;
 
+    const realEstateSignerEmail =
+      realEstateProfile?.signatureEmail?.trim() || application.requester.email;
+
     const realEstateSigner: PreparedSigner = {
       role: "REAL_ESTATE",
       name:
         realEstateProfile?.responsibleName ??
         realEstateProfile?.name ??
         application.requester.name,
-      email: application.requester.email,
+      email: realEstateSignerEmail,
       phone: realEstateProfile?.phone,
       document: realEstateSignerDocument,
     };
