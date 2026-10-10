@@ -228,9 +228,47 @@ export class ContractService {
       );
     }
 
+/**
+ * Configuração de templates personalizados por parceiro/imobiliária.
+ *
+ * MECANISMO DE ROLLBACK RÁPIDO:
+ * Para desativar imediatamente qualquer template customizado e voltar ao modelo
+ * padrão para 100% das imobiliárias, basta alterar ENABLE_CUSTOM_TEMPLATES para false.
+ */
+const ENABLE_CUSTOM_TEMPLATES = true;
+
+const AMICI_CUSTOM_TEMPLATE_PATH = path.resolve(
+  process.cwd(),
+  "src/templates/amici-rental-application-contract.docx",
+);
+
+function resolveContractTemplatePath(requester?: {
+  email?: string | null;
+  realEstateProfile?: { cnpj?: string | null } | null;
+}): string {
+  if (!ENABLE_CUSTOM_TEMPLATES) {
+    return env.CONTRACT_TEMPLATE_PATH;
+  }
+
+  const requesterEmail = (requester?.email ?? "").toLowerCase().trim();
+  const requesterCnpj = (requester?.realEstateProfile?.cnpj ?? "").replace(/\D/g, "");
+
+  const isAmici =
+    requesterEmail === "lucas@amicigestao.com.br" ||
+    requesterCnpj === "53944193000103";
+
+  if (isAmici && fs.existsSync(AMICI_CUSTOM_TEMPLATE_PATH)) {
+    return AMICI_CUSTOM_TEMPLATE_PATH;
+  }
+
+  return env.CONTRACT_TEMPLATE_PATH;
+}
+
     assertContractDataIsComplete(application);
 
-    if (!fs.existsSync(env.CONTRACT_TEMPLATE_PATH)) {
+    const templatePath = resolveContractTemplatePath(application.requester);
+
+    if (!fs.existsSync(templatePath)) {
       throw new AppError(500, "Template de contrato não encontrado");
     }
 
@@ -241,7 +279,7 @@ export class ContractService {
     }
 
     const templateBinary = fs.readFileSync(
-      env.CONTRACT_TEMPLATE_PATH,
+      templatePath,
       "binary",
     );
 
