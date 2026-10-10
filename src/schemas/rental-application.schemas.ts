@@ -77,34 +77,62 @@ const contractTenantSchema = z.object({
   ),
 });
 
-export const fillContractDataSchema = z.object({
-  tenants: z
-    .array(contractTenantSchema)
-    .min(1, "Informe pelo menos 1 locatário")
-    .max(3, "É permitido informar no máximo 3 locatários"),
+const normalizeFillContractDataInput = (data: unknown) => {
+  if (typeof data !== "object" || data === null) return data;
+  const raw = data as Record<string, any>;
 
-  propertyZipCode: z
-    .string()
-    .min(8, "O CEP da propriedade deve conter pelo menos 8 caracteres"),
-  propertyStreet: z
-    .string()
-    .min(3, "A rua da propriedade deve conter pelo menos 3 caracteres"),
-  propertyNumber: z
-    .string()
-    .min(1, "O número da propriedade deve conter pelo menos 1 caractere"),
-  propertyComplement: z.string().optional(),
-  propertyNeighborhood: z
-    .string()
-    .min(2, "O bairro da propriedade deve conter pelo menos 2 caracteres"),
-  propertyCity: z
-    .string()
-    .min(2, "A cidade da propriedade deve conter pelo menos 2 caracteres"),
-  propertyState: z
-    .string()
-    .length(2, "O estado da propriedade deve conter exatamente 2 caracteres"),
+  let tenants = raw.tenants;
+  if (!Array.isArray(tenants) || tenants.length === 0) {
+    if (raw.tenantName) {
+      tenants = [
+        {
+          name: raw.tenantName,
+          document: raw.tenantDocument,
+          email: raw.tenantEmail,
+          phone: raw.tenantPhone,
+        },
+      ];
+    }
+  }
 
-  adhesionFee: currencyValueSchema,
-});
+  return {
+    ...raw,
+    tenants,
+    adhesionFee: raw.adhesionFee ?? 0,
+  };
+};
+
+export const fillContractDataSchema = z.preprocess(
+  normalizeFillContractDataInput,
+  z.object({
+    tenants: z
+      .array(contractTenantSchema)
+      .min(1, "Informe pelo menos 1 locatário")
+      .max(3, "É permitido informar no máximo 3 locatários"),
+
+    propertyZipCode: z
+      .string()
+      .min(8, "O CEP da propriedade deve conter pelo menos 8 caracteres"),
+    propertyStreet: z
+      .string()
+      .min(3, "A rua da propriedade deve conter pelo menos 3 caracteres"),
+    propertyNumber: z
+      .string()
+      .min(1, "O número da propriedade deve conter pelo menos 1 caractere"),
+    propertyComplement: z.string().optional(),
+    propertyNeighborhood: z
+      .string()
+      .min(2, "O bairro da propriedade deve conter pelo menos 2 caracteres"),
+    propertyCity: z
+      .string()
+      .min(2, "A cidade da propriedade deve conter pelo menos 2 caracteres"),
+    propertyState: z
+      .string()
+      .length(2, "O estado da propriedade deve conter exatamente 2 caracteres"),
+
+    adhesionFee: currencyValueSchema,
+  }),
+);
 
 export const contestRentalApplicationSchema = z.object({
   reason: z.string().min(10, "O motivo deve conter pelo menos 10 caracteres"),
