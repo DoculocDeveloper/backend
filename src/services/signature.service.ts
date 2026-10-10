@@ -281,16 +281,14 @@ export class SignatureService {
 
       for (const signer of signers) {
         const signerDocument = onlyDigits(signer.document);
-
-        const shouldSendDocumentation =
-          signer.role === "TENANT" && [11, 14].includes(signerDocument.length);
+        const isCpf = signerDocument.length === 11;
 
         const clicksignSigner = await clicksignClient.createSigner({
           envelopeId,
           name: signer.name,
           email: signer.email,
           phoneNumber: onlyDigits(signer.phone) || null,
-          documentation: shouldSendDocumentation ? signerDocument : null,
+          documentation: isCpf ? signerDocument : null,
           group: 1,
         });
 
@@ -303,7 +301,7 @@ export class SignatureService {
         });
 
         const authenticationMethod =
-          signer.role === "TENANT" ? "facial_biometrics" : "email";
+          signer.role === "TENANT" && isCpf ? "facial_biometrics" : "email";
 
         await clicksignClient.createAuthenticationRequirement({
           envelopeId,
