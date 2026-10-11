@@ -237,6 +237,11 @@ export class ContractService {
  */
 const ENABLE_CUSTOM_TEMPLATES = true;
 
+const COLINA_CUSTOM_TEMPLATE_PATH = path.resolve(
+  process.cwd(),
+  "src/templates/colina-rental-application-contract.docx",
+);
+
 const AMICI_CUSTOM_TEMPLATE_PATH = path.resolve(
   process.cwd(),
   "src/templates/amici-rental-application-contract.docx",
@@ -252,6 +257,14 @@ function resolveContractTemplatePath(requester?: {
 
   const requesterEmail = (requester?.email ?? "").toLowerCase().trim();
   const requesterCnpj = (requester?.realEstateProfile?.cnpj ?? "").replace(/\D/g, "");
+
+  const isColina =
+    requesterEmail === "administracao@imobiliariacolina.com.br" ||
+    requesterCnpj === "30793440000104";
+
+  if (isColina && fs.existsSync(COLINA_CUSTOM_TEMPLATE_PATH)) {
+    return COLINA_CUSTOM_TEMPLATE_PATH;
+  }
 
   const isAmici =
     requesterEmail === "lucas@amicigestao.com.br" ||
