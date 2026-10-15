@@ -259,6 +259,7 @@ function resolveContractTemplatePath(requester?: {
   const requesterCnpj = (requester?.realEstateProfile?.cnpj ?? "").replace(/\D/g, "");
 
   const isColina =
+    requesterEmail === "atendimento@imobiliariacolina.com.br" ||
     requesterEmail === "administracao@imobiliariacolina.com.br" ||
     requesterCnpj === "30793440000104";
 
