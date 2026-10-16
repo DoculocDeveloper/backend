@@ -447,4 +447,14 @@ export class RentalApplicationController {
 
     return response.status(204).send();
   }
+
+  async reopen(request: Request, response: Response) {
+    const params = rentalApplicationParamsSchema.parse(request.params);
+
+    const application = await rentalApplicationService.reopenForEditing({
+      applicationId: params.id,
+    });
+
+    return response.json({ application });
+  }
 }

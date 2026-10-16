@@ -7,12 +7,14 @@ import { AppError } from "../middlewares/error-handler.js";
 // Services
 import { CreditService } from "./credit.service.js";
 import { oragoClient } from "./orago-client.js";
+import { ClicksignClient } from "./clicksign-client.js";
 
 // Utils
 import { extractApplicantName } from "../utils/extract-applicant-name.js";
 import { evaluateTenant } from "../utils/evaluate-tenant.js";
 
 const creditService = new CreditService();
+const clicksignClient = new ClicksignClient();
 
 type CreateByCpfInput = {
   requesterId: string;
@@ -860,7 +862,9 @@ export class RentalApplicationService {
       throw new AppError(403, "Acesso negado");
     }
 
-    const canFillContractData = application.status === "WAITING_CONTRACT_DATA";
+    const canFillContractData =
+      application.status === "WAITING_CONTRACT_DATA" ||
+      application.status === "WAITING_ADMIN_CONTRACT";
 
     if (!canFillContractData) {
       throw new AppError(
@@ -1119,5 +1123,85 @@ export class RentalApplicationService {
       deleted: true,
       id: application.id,
     };
+  }
+
+  async reopenForEditing(params: { applicationId: string }) {
+    const application = await prisma.rentalApplication.findUnique({
+      where: {
+        id: params.applicationId,
+      },
+      include: {
+        contract: true,
+      },
+    });
+
+    if (!application) {
+      throw new AppError(404, "Consulta não encontrada");
+    }
+
+    if (application.contract?.signatureStatus === "SIGNED") {
+      throw new AppError(
+        400,
+        "Contrato já assinado e não pode ter dados reabertos.",
+      );
+    }
+
+    if (
+      application.contract?.clicksignEnvelopeId &&
+      application.contract?.clicksignDocumentId
+    ) {
+      try {
+        await clicksignClient.cancelDocument({
+          envelopeId: application.contract.clicksignEnvelopeId,
+          documentId: application.contract.clicksignDocumentId,
+        });
+      } catch (error) {
+        console.error("[CLICKSIGN_REOPEN_CANCEL_ERROR]", error);
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (application.contract) {
+        await tx.contractSigner.deleteMany({
+          where: {
+            contractId: application.contract.id,
+          },
+        });
+
+        await tx.contract.update({
+          where: {
+            id: application.contract.id,
+          },
+          data: {
+            status: "PENDING",
+            clicksignEnvelopeId: null,
+            clicksignDocumentId: null,
+            signatureStatus: "NOT_SENT",
+            signatureError: null,
+            sentToSignatureAt: null,
+            signedAt: null,
+          },
+        });
+      }
+
+      await tx.rentalApplication.update({
+        where: {
+          id: application.id,
+        },
+        data: {
+          status: "WAITING_CONTRACT_DATA",
+        },
+      });
+    });
+
+    return prisma.rentalApplication.findUnique({
+      where: {
+        id: params.applicationId,
+      },
+      include: {
+        contract: true,
+        tenants: true,
+      },
+    });
   }
 }

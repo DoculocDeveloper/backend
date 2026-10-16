@@ -69,4 +69,10 @@ rentalApplicationRoutes.delete(
   asyncHandler(rentalApplicationController.delete),
 );
 
+rentalApplicationRoutes.post(
+  "/:id/reopen",
+  authorize(UserRole.ADMIN),
+  asyncHandler(rentalApplicationController.reopen),
+);
+
 export { rentalApplicationRoutes };
