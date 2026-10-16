@@ -438,11 +438,20 @@ export class SignatureService {
       );
     }
 
-    await clicksignClient.notifyEnvelope({
-      envelopeId: contract.clicksignEnvelopeId,
-      message:
-        "Você recebeu uma nova notificação para assinatura do contrato Doculoc.",
-    });
+    try {
+      await clicksignClient.notifyEnvelope({
+        envelopeId: contract.clicksignEnvelopeId,
+        message:
+          "Você recebeu uma nova notificação para assinatura do contrato Doculoc.",
+      });
+    } catch (error) {
+      console.error("[CLICKSIGN_NOTIFY_ENVELOPE_ERROR]", error);
+      throw new AppError(
+        429,
+        "A Clicksign limita o envio de notificações. Por favor, aguarde 1 minuto para tentar reenviar.",
+        "CLICKSIGN_RATE_LIMIT",
+      );
+    }
 
     return prisma.contract.findUnique({
       where: {
