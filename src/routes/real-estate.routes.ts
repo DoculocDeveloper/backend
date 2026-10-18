@@ -28,4 +28,28 @@ realEstateRoutes.patch(
   asyncHandler(realEstateController.updateProfile),
 );
 
+realEstateRoutes.get(
+  "/:id",
+  authorize(UserRole.ADMIN),
+  asyncHandler(realEstateController.getById),
+);
+
+realEstateRoutes.get(
+  "/:id/sellers",
+  authorize(UserRole.ADMIN),
+  asyncHandler(realEstateController.listSellers),
+);
+
+realEstateRoutes.post(
+  "/:id/sellers",
+  authorize(UserRole.ADMIN),
+  asyncHandler(realEstateController.createSeller),
+);
+
+realEstateRoutes.delete(
+  "/:id/sellers/:sellerId",
+  authorize(UserRole.ADMIN),
+  asyncHandler(realEstateController.deleteSeller),
+);
+
 export { realEstateRoutes };

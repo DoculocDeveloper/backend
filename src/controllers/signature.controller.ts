@@ -29,6 +29,7 @@ export class SignatureController {
       contractId: params.id,
       requesterId: request.user!.id,
       role: request.user!.role,
+      realEstateId: request.user!.realEstateId,
     });
 
     return response.json(result);

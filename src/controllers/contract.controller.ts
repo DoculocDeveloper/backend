@@ -50,7 +50,20 @@ export class ContractController {
   }
 
   const isAdmin = request.user!.role === "ADMIN";
-  const isOwner = contract.application.requesterId === request.user!.id;
+  let sellerRealEstateId = request.user!.realEstateId;
+  if (request.user!.role === "SELLER" && !sellerRealEstateId) {
+    const sellerUser = await prisma.user.findUnique({
+      where: { id: request.user!.id },
+      select: { realEstateId: true },
+    });
+    sellerRealEstateId = sellerUser?.realEstateId;
+  }
+
+  const isOwner =
+    contract.application.requesterId === request.user!.id ||
+    (request.user!.role === "SELLER" &&
+      Boolean(sellerRealEstateId) &&
+      contract.application.requesterId === sellerRealEstateId);
 
   if (!isAdmin && !isOwner) {
     throw new AppError(403, "Acesso negado");

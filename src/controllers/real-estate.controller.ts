@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 
 import { UserRole } from "../domain/roles.js";
 import { prisma } from "../lib/prisma.js";
@@ -15,6 +16,9 @@ export class RealEstateController {
     const realEstates = await prisma.user.findMany({
       where: {
         role: UserRole.REAL_ESTATE,
+        rentalApplications: {
+          some: {},
+        },
         ...(search
           ? {
               OR: [
@@ -104,6 +108,7 @@ export class RealEstateController {
         _count: {
           select: {
             applications: true,
+            sellers: true,
           },
         },
       },
@@ -116,6 +121,7 @@ export class RealEstateController {
       realEstates: realEstates.map(({ _count, ...realEstate }) => ({
         ...realEstate,
         applicationsCount: _count.applications,
+        sellersCount: _count.sellers,
       })),
     });
   }
@@ -171,5 +177,175 @@ export class RealEstateController {
       profile,
     });
   }
+
+  async getById(request: Request, response: Response) {
+    const id = String(request.params.id);
+
+    const realEstate = await prisma.user.findFirst({
+      where: {
+        id,
+        role: UserRole.REAL_ESTATE,
+      },
+      include: {
+        realEstateProfile: true,
+        wallet: true,
+        sellers: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            cpf: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
+        _count: {
+          select: {
+            applications: true,
+            sellers: true,
+          },
+        },
+      },
+    });
+
+    if (!realEstate) {
+      throw new AppError(404, "Imobiliária não encontrada.");
+    }
+
+    const { _count, ...rest } = realEstate;
+
+    return response.json({
+      realEstate: {
+        ...rest,
+        applicationsCount: _count.applications,
+        sellersCount: _count.sellers,
+      },
+    });
+  }
+
+  async listSellers(request: Request, response: Response) {
+    const id = String(request.params.id);
+
+    const sellers = await prisma.user.findMany({
+      where: {
+        realEstateId: id,
+        role: UserRole.SELLER,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        cpf: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return response.json({ sellers });
+  }
+
+  async createSeller(request: Request, response: Response) {
+    const realEstateId = String(request.params.id);
+
+    const createSellerSchema = z.object({
+      name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres."),
+      cpf: z.string().min(11, "CPF inválido."),
+      email: z.string().email("Informe um e-mail válido."),
+      password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
+    });
+
+    const body = createSellerSchema.parse(request.body);
+
+    const realEstate = await prisma.user.findFirst({
+      where: {
+        id: realEstateId,
+        role: UserRole.REAL_ESTATE,
+      },
+    });
+
+    if (!realEstate) {
+      throw new AppError(404, "Imobiliária não encontrada.");
+    }
+
+    const normalizedEmail = body.email.trim().toLowerCase();
+    const cleanCpf = body.cpf.replace(/\D/g, "");
+
+    const emailAlreadyInUse = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (emailAlreadyInUse) {
+      throw new AppError(409, "Este e-mail já está cadastrado.");
+    }
+
+    if (cleanCpf) {
+      const cpfAlreadyInUse = await prisma.user.findFirst({
+        where: {
+          cpf: cleanCpf,
+        },
+      });
+
+      if (cpfAlreadyInUse) {
+        throw new AppError(409, "Este CPF já está cadastrado.");
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(body.password, 10);
+
+    const seller = await prisma.user.create({
+      data: {
+        name: body.name.trim(),
+        email: normalizedEmail,
+        cpf: cleanCpf,
+        passwordHash,
+        role: UserRole.SELLER,
+        realEstateId: realEstate.id,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        cpf: true,
+        role: true,
+        realEstateId: true,
+        createdAt: true,
+      },
+    });
+
+    return response.status(201).json({
+      message: "Vendedor cadastrado com sucesso.",
+      seller,
+    });
+  }
+
+  async deleteSeller(request: Request, response: Response) {
+    const realEstateId = String(request.params.id);
+    const sellerId = String(request.params.sellerId);
+
+    const seller = await prisma.user.findFirst({
+      where: {
+        id: sellerId,
+        realEstateId,
+        role: UserRole.SELLER,
+      },
+    });
+
+    if (!seller) {
+      throw new AppError(404, "Vendedor não encontrado para esta imobiliária.");
+    }
+
+    await prisma.user.delete({
+      where: { id: seller.id },
+    });
+
+    return response.json({ message: "Vendedor removido com sucesso." });
+  }
 }
+
 

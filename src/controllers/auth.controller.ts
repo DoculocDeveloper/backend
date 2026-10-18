@@ -281,8 +281,20 @@ export class AuthController {
         email: true,
         passwordHash: true,
         role: true,
+        cpf: true,
+        realEstateId: true,
         realEstateProfile: {
           select: realEstateProfileSelect,
+        },
+        realEstate: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            realEstateProfile: {
+              select: realEstateProfileSelect,
+            },
+          },
         },
       },
     });
@@ -302,10 +314,20 @@ export class AuthController {
 
     const expiresIn = user.role === "ADMIN" ? "7d" : "12h";
 
-    const token = jwt.sign({ role: user.role }, env.JWT_SECRET, {
-      subject: user.id,
-      expiresIn: expiresIn,
-    });
+    const token = jwt.sign(
+      {
+        role: user.role,
+        realEstateId: user.realEstateId ?? null,
+      },
+      env.JWT_SECRET,
+      {
+        subject: user.id,
+        expiresIn: expiresIn,
+      }
+    );
+
+    const effectiveProfile =
+      user.realEstateProfile ?? user.realEstate?.realEstateProfile ?? null;
 
     return response.json({
       token,
@@ -314,7 +336,16 @@ export class AuthController {
         name: user.name,
         email: user.email,
         role: user.role,
-        realEstateProfile: user.realEstateProfile,
+        cpf: user.cpf ?? null,
+        realEstateId: user.realEstateId ?? null,
+        realEstateProfile: effectiveProfile,
+        realEstate: user.realEstate
+          ? {
+              id: user.realEstate.id,
+              name: user.realEstate.name,
+              email: user.realEstate.email,
+            }
+          : null,
       },
     });
   }
@@ -428,8 +459,20 @@ export class AuthController {
         name: true,
         email: true,
         role: true,
+        cpf: true,
+        realEstateId: true,
         realEstateProfile: {
           select: realEstateProfileSelect,
+        },
+        realEstate: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            realEstateProfile: {
+              select: realEstateProfileSelect,
+            },
+          },
         },
       },
     });
@@ -438,6 +481,26 @@ export class AuthController {
       throw new AppError(401, "Usuário não encontrado");
     }
 
-    return response.json({ user });
+    const effectiveProfile =
+      user.realEstateProfile ?? user.realEstate?.realEstateProfile ?? null;
+
+    return response.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        cpf: user.cpf ?? null,
+        realEstateId: user.realEstateId ?? null,
+        realEstateProfile: effectiveProfile,
+        realEstate: user.realEstate
+          ? {
+              id: user.realEstate.id,
+              name: user.realEstate.name,
+              email: user.realEstate.email,
+            }
+          : null,
+      },
+    });
   }
 }

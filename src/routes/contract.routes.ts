@@ -27,7 +27,7 @@ contractRoutes.post(
 
 contractRoutes.get(
   "/:id/download",
-  authorize(UserRole.ADMIN, UserRole.REAL_ESTATE),
+  authorize(UserRole.ADMIN, UserRole.REAL_ESTATE, UserRole.SELLER),
   asyncHandler(contractController.download),
 );
 
@@ -39,7 +39,12 @@ contractRoutes.post(
 
 contractRoutes.get(
   "/:id/signature/status",
-  authorize(UserRole.ADMIN, UserRole.REAL_ESTATE, UserRole.ACCOUNT_EXECUTIVE),
+  authorize(
+    UserRole.ADMIN,
+    UserRole.REAL_ESTATE,
+    UserRole.ACCOUNT_EXECUTIVE,
+    UserRole.SELLER,
+  ),
   asyncHandler(signatureController.status),
 );
 

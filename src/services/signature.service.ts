@@ -375,6 +375,7 @@ export class SignatureService {
     contractId: string;
     requesterId: string;
     role: string;
+    realEstateId?: string | null;
   }) {
     const contract = await prisma.contract.findUnique({
       where: {
@@ -394,10 +395,22 @@ export class SignatureService {
       throw new AppError(404, "Contrato não encontrado");
     }
 
+    let sellerRealEstateId = params.realEstateId;
+    if (params.role === "SELLER" && !sellerRealEstateId) {
+      const sellerUser = await prisma.user.findUnique({
+        where: { id: params.requesterId },
+        select: { realEstateId: true },
+      });
+      sellerRealEstateId = sellerUser?.realEstateId;
+    }
+
     const canSeeSignature =
       params.role === "ADMIN" ||
       params.role === "ACCOUNT_EXECUTIVE" ||
-      contract.application.requesterId === params.requesterId;
+      contract.application.requesterId === params.requesterId ||
+      (params.role === "SELLER" &&
+        Boolean(sellerRealEstateId) &&
+        contract.application.requesterId === sellerRealEstateId);
 
     if (!canSeeSignature) {
       throw new AppError(403, "Acesso negado");

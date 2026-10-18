@@ -11,6 +11,7 @@ enum UserRole {
   ADMIN
   REAL_ESTATE
   ACCOUNT_EXECUTIVE
+  SELLER
 }
 
 enum RealEstateProfileType {
@@ -135,6 +136,14 @@ model User {
 
   createdContests  RentalApplicationContest[] @relation("CreatedContests")
   reviewedContests RentalApplicationContest[] @relation("ReviewedContests")
+
+  cpf          String?
+  realEstateId String?
+  realEstate   User?   @relation("RealEstateSellers", fields: [realEstateId], references: [id], onDelete: Cascade)
+  sellers      User[]  @relation("RealEstateSellers")
+
+  @@index([realEstateId])
+  @@index([cpf])
 }
 
 model PasswordResetToken {

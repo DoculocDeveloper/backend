@@ -7,6 +7,7 @@ import { AppError } from "./error-handler.js";
 type JwtPayload = {
   sub: string;
   role: UserRole;
+  realEstateId?: string | null;
 };
 
 export function ensureAuthenticated(request: Request, _response: Response, next: NextFunction) {
@@ -22,7 +23,8 @@ export function ensureAuthenticated(request: Request, _response: Response, next:
     const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
     request.user = {
       id: payload.sub,
-      role: payload.role
+      role: payload.role,
+      realEstateId: payload.realEstateId ?? null,
     };
     next();
   } catch {

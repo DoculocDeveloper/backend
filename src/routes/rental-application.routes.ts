@@ -23,19 +23,34 @@ rentalApplicationRoutes.post(
 
 rentalApplicationRoutes.get(
   "/",
-  authorize(UserRole.ADMIN, UserRole.REAL_ESTATE, UserRole.ACCOUNT_EXECUTIVE),
+  authorize(
+    UserRole.ADMIN,
+    UserRole.REAL_ESTATE,
+    UserRole.ACCOUNT_EXECUTIVE,
+    UserRole.SELLER,
+  ),
   asyncHandler(rentalApplicationController.list),
 );
 
 rentalApplicationRoutes.get(
   "/consults/:id/status",
-  authorize(UserRole.ADMIN, UserRole.REAL_ESTATE, UserRole.ACCOUNT_EXECUTIVE),
+  authorize(
+    UserRole.ADMIN,
+    UserRole.REAL_ESTATE,
+    UserRole.ACCOUNT_EXECUTIVE,
+    UserRole.SELLER,
+  ),
   asyncHandler(rentalApplicationController.getConsultStatus),
 );
 
 rentalApplicationRoutes.get(
   "/:id",
-  authorize(UserRole.ADMIN, UserRole.REAL_ESTATE, UserRole.ACCOUNT_EXECUTIVE),
+  authorize(
+    UserRole.ADMIN,
+    UserRole.REAL_ESTATE,
+    UserRole.ACCOUNT_EXECUTIVE,
+    UserRole.SELLER,
+  ),
   asyncHandler(rentalApplicationController.getById),
 );
 
