@@ -16,7 +16,7 @@ export class RealEstateController {
     const realEstates = await prisma.user.findMany({
       where: {
         role: UserRole.REAL_ESTATE,
-        rentalApplications: {
+        applications: {
           some: {},
         },
         ...(search
