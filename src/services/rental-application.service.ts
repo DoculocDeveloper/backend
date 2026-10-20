@@ -919,6 +919,8 @@ export class RentalApplicationService {
       propertyCity: string;
       propertyState: string;
       adhesionFee: number;
+      rentValue?: number;
+      condominiumValue?: number;
     };
   }) {
     const application = await prisma.rentalApplication.findUnique({
@@ -956,6 +958,19 @@ export class RentalApplicationService {
       );
     }
 
+    const rentValue =
+      params.data.rentValue !== undefined && params.data.rentValue !== null
+        ? params.data.rentValue
+        : Number(application.rentValue);
+
+    const condominiumValue =
+      params.data.condominiumValue !== undefined && params.data.condominiumValue !== null
+        ? params.data.condominiumValue
+        : Number(application.condominiumValue);
+
+    const feesValue = Number(application.feesValue ?? 0);
+    const requestedExpense = rentValue + condominiumValue + feesValue;
+
     const updatedApplication = await prisma.$transaction(async (tx) => {
       const updated = await tx.rentalApplication.update({
         where: { id: params.applicationId },
@@ -973,6 +988,10 @@ export class RentalApplicationService {
           propertyCity: params.data.propertyCity,
           propertyState: params.data.propertyState,
           adhesionFee: params.data.adhesionFee,
+
+          rentValue,
+          condominiumValue,
+          requestedExpense,
 
           status: "WAITING_ADMIN_CONTRACT",
         },

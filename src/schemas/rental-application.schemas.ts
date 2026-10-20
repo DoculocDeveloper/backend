@@ -99,6 +99,12 @@ const normalizeFillContractDataInput = (data: unknown) => {
     ...raw,
     tenants,
     adhesionFee: raw.adhesionFee ?? 0,
+    ...(raw.rentValue !== undefined && raw.rentValue !== null
+      ? { rentValue: raw.rentValue }
+      : {}),
+    ...(raw.condominiumValue !== undefined && raw.condominiumValue !== null
+      ? { condominiumValue: raw.condominiumValue }
+      : {}),
   };
 };
 
@@ -131,6 +137,8 @@ export const fillContractDataSchema = z.preprocess(
       .length(2, "O estado da propriedade deve conter exatamente 2 caracteres"),
 
     adhesionFee: currencyValueSchema,
+    rentValue: positiveCurrencyValueSchema.optional(),
+    condominiumValue: currencyValueSchema.optional(),
   }),
 );
 
