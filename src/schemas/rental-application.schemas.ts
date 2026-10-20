@@ -105,6 +105,9 @@ const normalizeFillContractDataInput = (data: unknown) => {
     ...(raw.condominiumValue !== undefined && raw.condominiumValue !== null
       ? { condominiumValue: raw.condominiumValue }
       : {}),
+    ...(raw.feesValue !== undefined && raw.feesValue !== null
+      ? { feesValue: raw.feesValue }
+      : {}),
   };
 };
 
@@ -139,6 +142,7 @@ export const fillContractDataSchema = z.preprocess(
     adhesionFee: currencyValueSchema,
     rentValue: positiveCurrencyValueSchema.optional(),
     condominiumValue: currencyValueSchema.optional(),
+    feesValue: currencyValueSchema.optional(),
   }),
 );
 
