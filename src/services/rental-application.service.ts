@@ -65,12 +65,15 @@ function getInitialWorkflowStatus(decisionStatus: string) {
   return "CONSULTED";
 }
 
-async function tryCollectOragoWithRetry(analysisId: string) {
-  const attempts = 3;
-  const delayMs = 3000;
+async function tryCollectOragoWithRetry(
+  analysisId: string,
+  options?: { attempts?: number; delayMs?: number },
+) {
+  const attempts = options?.attempts ?? 3;
+  const delayMs = options?.delayMs ?? 3000;
 
   let lastResponse: any = null;
-  let lastError: unknown = null;
+  let lastFatalError: unknown = null;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
@@ -93,27 +96,36 @@ async function tryCollectOragoWithRetry(analysisId: string) {
       }
 
       if (response?.error === true) {
-        throw new AppError(
+        lastFatalError = new AppError(
           502,
           response?.message ?? "Erro retornado pela Órago ao coletar análise.",
           "ORAGO_COLLECT_RETURNED_ERROR",
         );
+        break;
       }
     } catch (error) {
-      lastError = error;
-
-      console.error("[ORAGO_COLLECT_ERROR]", {
+      console.warn("[ORAGO_COLLECT_ATTEMPT_WARNING]", {
         analysisId,
         attempt,
         message: getErrorMessage(error),
       });
+
+      if (
+        error instanceof AppError &&
+        error.code === "ORAGO_COLLECT_RETURNED_ERROR"
+      ) {
+        lastFatalError = error;
+        break;
+      }
     }
 
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    if (attempt < attempts && delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
 
-  if (lastError) {
-    throw lastError;
+  if (lastFatalError) {
+    throw lastFatalError;
   }
 
   console.log("[ORAGO_COLLECT_NOT_READY]", {
@@ -364,6 +376,8 @@ export class RentalApplicationService {
       },
     });
 
+    let lock: any = null;
+
     if (existingLock) {
       if (
         existingLock.requesterId === input.requesterId &&
@@ -380,21 +394,38 @@ export class RentalApplicationService {
         };
       }
 
-      throw new AppError(
-        409,
-        "Este CPF/CNPJ já possui uma consulta em processamento ou já foi consultado.",
-        "DOCUMENT_CONSULT_IN_PROGRESS",
-      );
+      if (
+        existingLock.requesterId === input.requesterId &&
+        existingLock.status === "FAILED"
+      ) {
+        lock = await prisma.oragoConsultLock.update({
+          where: { id: existingLock.id },
+          data: {
+            status: "PROCESSING",
+            errorMessage: null,
+            oragoAnalysisId: null,
+            rentValue: input.rentValue,
+            condominiumValue: input.condominiumValue,
+            feesValue: input.feesValue,
+          },
+        });
+      } else {
+        throw new AppError(
+          409,
+          "Este CPF/CNPJ já possui uma consulta em processamento ou já foi consultado.",
+          "DOCUMENT_CONSULT_IN_PROGRESS",
+        );
+      }
+    } else {
+      lock = await this.createConsultLock({
+        requesterId: input.requesterId,
+        document: input.cpf,
+        documentType: "CPF",
+        rentValue: input.rentValue,
+        condominiumValue: input.condominiumValue,
+        feesValue: input.feesValue,
+      });
     }
-
-    const lock = await this.createConsultLock({
-      requesterId: input.requesterId,
-      document: input.cpf,
-      documentType: "CPF",
-      rentValue: input.rentValue,
-      condominiumValue: input.condominiumValue,
-      feesValue: input.feesValue,
-    });
 
     try {
       const oragoCreateResponse = await oragoClient.createPfAnalysis({
@@ -430,6 +461,7 @@ export class RentalApplicationService {
 
       const collectResponse = await tryCollectOragoWithRetry(
         oragoCreateResponse.analysis_id,
+        { attempts: 1, delayMs: 0 },
       );
 
       if (!collectResponse) {
@@ -513,6 +545,8 @@ export class RentalApplicationService {
       },
     });
 
+    let lock: any = null;
+
     if (existingLock) {
       if (
         existingLock.requesterId === input.requesterId &&
@@ -529,21 +563,38 @@ export class RentalApplicationService {
         };
       }
 
-      throw new AppError(
-        409,
-        "Este CPF/CNPJ já possui uma consulta em processamento ou já foi consultado.",
-        "DOCUMENT_CONSULT_IN_PROGRESS",
-      );
+      if (
+        existingLock.requesterId === input.requesterId &&
+        existingLock.status === "FAILED"
+      ) {
+        lock = await prisma.oragoConsultLock.update({
+          where: { id: existingLock.id },
+          data: {
+            status: "PROCESSING",
+            errorMessage: null,
+            oragoAnalysisId: null,
+            rentValue: input.rentValue,
+            condominiumValue: input.condominiumValue,
+            feesValue: input.feesValue,
+          },
+        });
+      } else {
+        throw new AppError(
+          409,
+          "Este CPF/CNPJ já possui uma consulta em processamento ou já foi consultado.",
+          "DOCUMENT_CONSULT_IN_PROGRESS",
+        );
+      }
+    } else {
+      lock = await this.createConsultLock({
+        requesterId: input.requesterId,
+        document: input.cnpj,
+        documentType: "CNPJ",
+        rentValue: input.rentValue,
+        condominiumValue: input.condominiumValue,
+        feesValue: input.feesValue,
+      });
     }
-
-    const lock = await this.createConsultLock({
-      requesterId: input.requesterId,
-      document: input.cnpj,
-      documentType: "CNPJ",
-      rentValue: input.rentValue,
-      condominiumValue: input.condominiumValue,
-      feesValue: input.feesValue,
-    });
 
     try {
       const oragoCreateResponse = await oragoClient.createPjAnalysis({
@@ -564,6 +615,7 @@ export class RentalApplicationService {
 
       const collectResponse = await tryCollectOragoWithRetry(
         oragoCreateResponse.analysis_id,
+        { attempts: 1, delayMs: 0 },
       );
 
       if (!collectResponse) {
@@ -707,23 +759,42 @@ export class RentalApplicationService {
     let collectResponse: any = null;
 
     try {
-      collectResponse = await tryCollectOragoWithRetry(lock.oragoAnalysisId);
+      collectResponse = await tryCollectOragoWithRetry(lock.oragoAnalysisId, {
+        attempts: 1,
+        delayMs: 0,
+      });
     } catch (error) {
       const message = getErrorMessage(error);
 
-      await prisma.oragoConsultLock.update({
-        where: {
-          id: lock.id,
-        },
-        data: {
+      if (
+        error instanceof AppError &&
+        error.code === "ORAGO_COLLECT_RETURNED_ERROR"
+      ) {
+        await prisma.oragoConsultLock.update({
+          where: {
+            id: lock.id,
+          },
+          data: {
+            status: "FAILED",
+            errorMessage: message,
+          },
+        });
+
+        return {
           status: "FAILED",
-          errorMessage: message,
-        },
+          message,
+        };
+      }
+
+      console.warn("[ORAGO_POLL_TEMPORARY_ERROR]", {
+        analysisId: lock.oragoAnalysisId,
+        message,
       });
 
       return {
-        status: "FAILED",
-        message,
+        status: "PROCESSING",
+        consultLockId: lock.id,
+        message: "A análise ainda está em processamento na Órago.",
       };
     }
 
