@@ -161,6 +161,20 @@ export const adminDecisionSchema = z.object({
 export const listRentalApplicationsSchema = z.object({
   requesterId: z.string().uuid().optional(),
   status: rentalApplicationStatusSchema.optional(),
+  signatureStatus: z
+    .enum([
+      "NOT_SENT",
+      "ENVELOPE_CREATED",
+      "SENT",
+      "PARTIALLY_SIGNED",
+      "SIGNED",
+      "ACTION_REQUIRED",
+      "REFUSED",
+      "CANCELLED",
+      "ERROR",
+    ])
+    .optional(),
+  contractView: z.enum(["PENDING", "SIGNED", "ALL"]).optional(),
   search: z.string().trim().optional(),
   page: z.coerce.number().int().positive().default(1),
   perPage: z.coerce.number().int().positive().max(100).default(25),

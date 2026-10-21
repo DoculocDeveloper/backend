@@ -319,4 +319,17 @@ export class ClicksignClient {
       },
     );
   }
+
+  async getDocument(params: { envelopeId: string; documentId: string }) {
+    return this.request<ClicksignDataResponse<{
+      filename?: string;
+      status?: string;
+      downloads?: {
+        signed_file_url?: string;
+        original_file_url?: string;
+      };
+      [key: string]: any;
+    }>>(`/api/v3/envelopes/${params.envelopeId}/documents/${params.documentId}`);
+  }
 }
+

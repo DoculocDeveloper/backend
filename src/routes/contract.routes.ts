@@ -28,7 +28,13 @@ contractRoutes.post(
 contractRoutes.get(
   "/:id/download",
   authorize(UserRole.ADMIN, UserRole.REAL_ESTATE, UserRole.SELLER),
-  asyncHandler(contractController.download),
+  asyncHandler(contractController.download.bind(contractController)),
+);
+
+contractRoutes.get(
+  "/:id/signed-download",
+  authorize(UserRole.ADMIN, UserRole.REAL_ESTATE, UserRole.SELLER),
+  asyncHandler(contractController.downloadSigned.bind(contractController)),
 );
 
 contractRoutes.post(

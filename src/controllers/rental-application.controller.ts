@@ -192,16 +192,53 @@ export class RentalApplicationController {
       }
     }
 
+    let baseWhere: any;
+
+    if (query.contractView === "PENDING") {
+      baseWhere = {
+        OR: [
+          { status: "WAITING_ADMIN_CONTRACT" as const },
+          {
+            status: "CONTRACT_GENERATED" as const,
+            contract: {
+              is: {
+                signatureStatus: { not: "SIGNED" as const },
+              },
+            },
+          },
+        ],
+        ...searchFilter,
+      };
+    } else if (query.contractView === "SIGNED") {
+      baseWhere = {
+        status: "CONTRACT_GENERATED" as const,
+        contract: {
+          is: {
+            signatureStatus: "SIGNED" as const,
+          },
+        },
+        ...searchFilter,
+      };
+    } else {
+      const contractCondition = query.signatureStatus
+        ? { is: { signatureStatus: query.signatureStatus } }
+        : undefined;
+
+      baseWhere = {
+        ...(query.status ? { status: query.status } : {}),
+        ...(contractCondition ? { contract: contractCondition } : {}),
+        ...searchFilter,
+      };
+    }
+
     const where = canSeeAllApplications
       ? {
           requesterId: query.requesterId,
-          status: query.status,
-          ...searchFilter,
+          ...baseWhere,
         }
       : {
           requesterId: targetRequesterId,
-          status: query.status,
-          ...searchFilter,
+          ...baseWhere,
         };
 
     const [applications, total] = await Promise.all([
