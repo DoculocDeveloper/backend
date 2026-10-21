@@ -143,6 +143,59 @@ export class ContractController {
       throw new AppError(403, "Acesso negado");
     }
 
+function extractSignedUrlFromAny(obj: any): string | null {
+  if (!obj) return null;
+
+  if (typeof obj === "string") {
+    const s = obj.trim();
+    if (
+      (s.startsWith("http://") || s.startsWith("https://")) &&
+      (s.includes("signed") ||
+        s.includes(".pdf") ||
+        s.includes("clicksign-content") ||
+        s.includes("s3.amazonaws.com") ||
+        s.includes("downloads"))
+    ) {
+      return s;
+    }
+    return null;
+  }
+
+  if (typeof obj !== "object") return null;
+
+  // Direct attributes
+  if (obj.downloads?.signed_file_url) return obj.downloads.signed_file_url;
+  if (obj.signed_file_url) return obj.signed_file_url;
+  if (obj.downloads?.original_file_url) return obj.downloads.original_file_url;
+  if (obj.original_file_url) return obj.original_file_url;
+
+  if (obj.attributes) {
+    const fromAttrs = extractSignedUrlFromAny(obj.attributes);
+    if (fromAttrs) return fromAttrs;
+  }
+
+  if (obj.data) {
+    const fromData = extractSignedUrlFromAny(obj.data);
+    if (fromData) return fromData;
+  }
+
+  if (Array.isArray(obj.included)) {
+    for (const item of obj.included) {
+      const fromItem = extractSignedUrlFromAny(item);
+      if (fromItem) return fromItem;
+    }
+  }
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const fromItem = extractSignedUrlFromAny(item);
+      if (fromItem) return fromItem;
+    }
+  }
+
+  return null;
+}
+
     if (!contract.clicksignEnvelopeId) {
       throw new AppError(
         400,
@@ -152,59 +205,142 @@ export class ContractController {
 
     let signedUrl: string | null = null;
     let documentId = contract.clicksignDocumentId;
+    const debugAttempts: Array<{ step: string; status?: string; error?: string; keys?: string[] }> = [];
 
-    // 1. Tenta buscar o documento pelo documentId já salvo
+    // 1. Tenta buscar o documento pelo documentId já salvo (v3)
     if (documentId) {
       try {
-        const docResponse = await clicksignClient.getDocument({
+        const docResponse: any = await clicksignClient.getDocument({
           envelopeId: contract.clicksignEnvelopeId,
           documentId,
         });
 
-        signedUrl =
-          docResponse?.data?.attributes?.downloads?.signed_file_url ??
-          docResponse?.data?.attributes?.downloads?.original_file_url ??
-          (docResponse?.data?.attributes as any)?.signed_file_url ??
-          null;
-      } catch (error) {
-        console.warn("[CLICKSIGN_GET_DOCUMENT_FALLBACK]", error);
+        debugAttempts.push({
+          step: "getDocument_v3",
+          status: "ok",
+          keys: docResponse && typeof docResponse === "object" ? Object.keys(docResponse) : [],
+        });
+
+        signedUrl = extractSignedUrlFromAny(docResponse);
+      } catch (error: any) {
+        debugAttempts.push({ step: "getDocument_v3", error: error?.message || String(error) });
       }
     }
 
-    // 2. Se não encontrou a URL ou não tínhamos documentId, consulta a lista de documentos do envelope
+    // 2. Se não encontrou a URL ou não tínhamos documentId, consulta a lista de documentos do envelope (v3)
     if (!signedUrl) {
       try {
-        const envDocs = await clicksignClient.getEnvelopeDocuments(
+        const envDocs: any = await clicksignClient.getEnvelopeDocuments(
           contract.clicksignEnvelopeId,
         );
 
-        const docs = envDocs?.data ?? [];
-        if (docs.length > 0) {
-          const matchedDoc = docs[0];
+        debugAttempts.push({
+          step: "getEnvelopeDocuments_v3",
+          status: "ok",
+          keys: envDocs && typeof envDocs === "object" ? Object.keys(envDocs) : [],
+        });
 
-          if (!documentId && matchedDoc?.id) {
-            documentId = matchedDoc.id;
-            await prisma.contract.update({
-              where: { id: contract.id },
-              data: { clicksignDocumentId: matchedDoc.id },
-            });
-          }
+        signedUrl = extractSignedUrlFromAny(envDocs);
 
-          signedUrl =
-            matchedDoc?.attributes?.downloads?.signed_file_url ??
-            matchedDoc?.attributes?.downloads?.original_file_url ??
-            (matchedDoc?.attributes as any)?.signed_file_url ??
-            null;
+        if (!documentId && envDocs?.data?.[0]?.id) {
+          documentId = envDocs.data[0].id;
+          await prisma.contract.update({
+            where: { id: contract.id },
+            data: { clicksignDocumentId: documentId },
+          });
         }
-      } catch (error) {
-        console.error("[CLICKSIGN_GET_ENVELOPE_DOCS_ERROR]", error);
+      } catch (error: any) {
+        debugAttempts.push({ step: "getEnvelopeDocuments_v3", error: error?.message || String(error) });
+      }
+    }
+
+    // 3. Consulta envelope completo com includes de documents (v3)
+    if (!signedUrl) {
+      try {
+        const envWithDocs: any = await clicksignClient.getEnvelope(
+          contract.clicksignEnvelopeId,
+          "documents",
+        );
+
+        debugAttempts.push({
+          step: "getEnvelope_include_docs",
+          status: "ok",
+          keys: envWithDocs && typeof envWithDocs === "object" ? Object.keys(envWithDocs) : [],
+        });
+
+        signedUrl = extractSignedUrlFromAny(envWithDocs);
+      } catch (error: any) {
+        debugAttempts.push({ step: "getEnvelope_include_docs", error: error?.message || String(error) });
+      }
+    }
+
+    // 4. Se tiver documentId, tenta endpoint v1 (legado com token)
+    if (!signedUrl && documentId) {
+      try {
+        const docV1: any = await clicksignClient.getDocumentV1(documentId);
+        debugAttempts.push({
+          step: "getDocument_v1",
+          status: "ok",
+          keys: docV1 && typeof docV1 === "object" ? Object.keys(docV1) : [],
+        });
+
+        signedUrl = extractSignedUrlFromAny(docV1);
+      } catch (error: any) {
+        debugAttempts.push({ step: "getDocument_v1", error: error?.message || String(error) });
+      }
+    }
+
+    // 5. Tenta extrair das payloads de webhooks já recebidas e salvas no banco
+    if (!signedUrl) {
+      try {
+        const webhookEvents = await prisma.clicksignWebhookEvent.findMany({
+          where: {
+            OR: [
+              { contractId: contract.id },
+              { clicksignEnvelopeId: contract.clicksignEnvelopeId },
+              ...(documentId ? [{ clicksignDocumentId: documentId }] : []),
+            ],
+          },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        });
+
+        for (const event of webhookEvents) {
+          try {
+            const parsed = JSON.parse(event.payload);
+            const found = extractSignedUrlFromAny(parsed);
+            if (found) {
+              signedUrl = found;
+              debugAttempts.push({ step: "webhook_payload_db", status: "found" });
+              break;
+            }
+          } catch {
+            // ignore parse error
+          }
+        }
+      } catch (error: any) {
+        debugAttempts.push({ step: "webhook_payload_db", error: error?.message || String(error) });
       }
     }
 
     if (!signedUrl) {
+      console.error("[CLICKSIGN_DOWNLOAD_FAILED]", {
+        contractId: contract.id,
+        envelopeId: contract.clicksignEnvelopeId,
+        documentId: contract.clicksignDocumentId,
+        debugAttempts,
+      });
+
+      const failureSummary = debugAttempts
+        .map(
+          (a) =>
+            `${a.step}: ${a.error ? `erro(${a.error})` : a.keys?.length ? `chaves[${a.keys.join(",")}]` : a.status || "sem_url"}`,
+        )
+        .join(" | ");
+
       throw new AppError(
         400,
-        "O arquivo assinado ainda não está disponível para download na Clicksign. Aguarde alguns instantes e tente novamente.",
+        `O arquivo assinado ainda não está disponível na Clicksign. (${failureSummary})`,
       );
     }
 

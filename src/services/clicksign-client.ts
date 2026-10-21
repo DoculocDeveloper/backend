@@ -359,8 +359,20 @@ export class ClicksignClient {
     }>(`/api/v3/envelopes/${envelopeId}/documents`);
   }
 
-  async getEnvelope(envelopeId: string) {
-    return this.request<ClicksignDataResponse<any>>(`/api/v3/envelopes/${envelopeId}`);
+  async getEnvelope(envelopeId: string, include?: string) {
+    const query = include ? `?include=${encodeURIComponent(include)}` : "";
+    return this.request<ClicksignDataResponse<any>>(`/api/v3/envelopes/${envelopeId}${query}`);
+  }
+
+  async getDocumentV1(documentKey: string) {
+    return this.request<any>(
+      `/api/v1/documents/${documentKey}?access_token=${env.CLICKSIGN_ACCESS_TOKEN}`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
   }
 }
 
