@@ -55,14 +55,19 @@ export class ClicksignClient {
   private async request<T>(path: string, init: RequestInit = {}) {
     assertClicksignConfigured();
 
+    const headers: Record<string, string> = {
+      Authorization: env.CLICKSIGN_ACCESS_TOKEN!,
+      Accept: "application/vnd.api+json, application/json",
+      ...(init.headers as Record<string, string>),
+    };
+
+    if (init.body) {
+      headers["Content-Type"] = "application/vnd.api+json";
+    }
+
     const response = await fetch(`${env.CLICKSIGN_BASE_URL}${path}`, {
       ...init,
-      headers: {
-        Authorization: env.CLICKSIGN_ACCESS_TOKEN!,
-        "Content-Type": "application/vnd.api+json",
-        Accept: "application/vnd.api+json",
-        ...init.headers,
-      },
+      headers,
     });
 
     const text = await response.text();
@@ -327,9 +332,35 @@ export class ClicksignClient {
       downloads?: {
         signed_file_url?: string;
         original_file_url?: string;
+        zipped_file_url?: string;
       };
       [key: string]: any;
     }>>(`/api/v3/envelopes/${params.envelopeId}/documents/${params.documentId}`);
+  }
+
+  async getEnvelopeDocuments(envelopeId: string) {
+    return this.request<{
+      data?: Array<{
+        id: string;
+        type: string;
+        attributes?: {
+          filename?: string;
+          status?: string;
+          downloads?: {
+            signed_file_url?: string;
+            original_file_url?: string;
+            zipped_file_url?: string;
+          };
+          [key: string]: any;
+        };
+        [key: string]: any;
+      }>;
+      [key: string]: any;
+    }>(`/api/v3/envelopes/${envelopeId}/documents`);
+  }
+
+  async getEnvelope(envelopeId: string) {
+    return this.request<ClicksignDataResponse<any>>(`/api/v3/envelopes/${envelopeId}`);
   }
 }
 

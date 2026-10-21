@@ -143,25 +143,91 @@ export class ContractController {
       throw new AppError(403, "Acesso negado");
     }
 
-    if (contract.clicksignEnvelopeId && contract.clicksignDocumentId) {
+    if (!contract.clicksignEnvelopeId) {
+      throw new AppError(
+        400,
+        "Este contrato ainda não possui registro de assinatura na Clicksign.",
+      );
+    }
+
+    let signedUrl: string | null = null;
+    let documentId = contract.clicksignDocumentId;
+
+    // 1. Tenta buscar o documento pelo documentId já salvo
+    if (documentId) {
       try {
         const docResponse = await clicksignClient.getDocument({
           envelopeId: contract.clicksignEnvelopeId,
-          documentId: contract.clicksignDocumentId,
+          documentId,
         });
 
-        const signedUrl =
+        signedUrl =
           docResponse?.data?.attributes?.downloads?.signed_file_url ??
-          docResponse?.data?.attributes?.downloads?.original_file_url;
-
-        if (signedUrl) {
-          return response.json({ url: signedUrl });
-        }
+          docResponse?.data?.attributes?.downloads?.original_file_url ??
+          (docResponse?.data?.attributes as any)?.signed_file_url ??
+          null;
       } catch (error) {
-        console.error("[CLICKSIGN_GET_SIGNED_DOCUMENT_ERROR]", error);
+        console.warn("[CLICKSIGN_GET_DOCUMENT_FALLBACK]", error);
       }
     }
 
-    return this.download(request, response);
+    // 2. Se não encontrou a URL ou não tínhamos documentId, consulta a lista de documentos do envelope
+    if (!signedUrl) {
+      try {
+        const envDocs = await clicksignClient.getEnvelopeDocuments(
+          contract.clicksignEnvelopeId,
+        );
+
+        const docs = envDocs?.data ?? [];
+        if (docs.length > 0) {
+          const matchedDoc = docs[0];
+
+          if (!documentId && matchedDoc?.id) {
+            documentId = matchedDoc.id;
+            await prisma.contract.update({
+              where: { id: contract.id },
+              data: { clicksignDocumentId: matchedDoc.id },
+            });
+          }
+
+          signedUrl =
+            matchedDoc?.attributes?.downloads?.signed_file_url ??
+            matchedDoc?.attributes?.downloads?.original_file_url ??
+            (matchedDoc?.attributes as any)?.signed_file_url ??
+            null;
+        }
+      } catch (error) {
+        console.error("[CLICKSIGN_GET_ENVELOPE_DOCS_ERROR]", error);
+      }
+    }
+
+    if (!signedUrl) {
+      throw new AppError(
+        400,
+        "O arquivo assinado ainda não está disponível para download na Clicksign. Aguarde alguns instantes e tente novamente.",
+      );
+    }
+
+    // Tenta fazer o stream do arquivo assinado (PDF) direto para o cliente
+    try {
+      const fileResponse = await fetch(signedUrl);
+      if (fileResponse.ok) {
+        const safeDocNumber = contract.application.document.replace(/\D/g, "");
+        const downloadFileName = `contrato-assinado-${safeDocNumber || "doculoc"}.pdf`;
+
+        response.setHeader("Content-Type", "application/pdf");
+        response.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${encodeURIComponent(downloadFileName)}"; filename*=UTF-8''${encodeURIComponent(downloadFileName)}`,
+        );
+
+        const arrayBuffer = await fileResponse.arrayBuffer();
+        return response.send(Buffer.from(arrayBuffer));
+      }
+    } catch (streamError) {
+      console.warn("[CLICKSIGN_STREAM_ERROR_RETURNING_JSON]", streamError);
+    }
+
+    return response.json({ url: signedUrl });
   }
 }
