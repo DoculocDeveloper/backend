@@ -143,53 +143,86 @@ export class ContractController {
       throw new AppError(403, "Acesso negado");
     }
 
-function extractSignedUrlFromAny(obj: any): string | null {
-  if (!obj) return null;
+function extractSignedUrlFromAny(obj: any, depth = 0): string | null {
+  if (!obj || depth > 8) return null;
 
   if (typeof obj === "string") {
     const s = obj.trim();
-    if (
-      (s.startsWith("http://") || s.startsWith("https://")) &&
-      (s.includes("signed") ||
-        s.includes(".pdf") ||
-        s.includes("clicksign-content") ||
-        s.includes("s3.amazonaws.com") ||
-        s.includes("downloads"))
-    ) {
-      return s;
+    if (s.startsWith("http://") || s.startsWith("https://")) {
+      if (
+        !s.includes("/relationships/") &&
+        !s.endsWith("/documents") &&
+        !s.endsWith("/signers")
+      ) {
+        return s;
+      }
     }
     return null;
   }
 
   if (typeof obj !== "object") return null;
 
-  // Direct attributes
-  if (obj.downloads?.signed_file_url) return obj.downloads.signed_file_url;
-  if (obj.signed_file_url) return obj.signed_file_url;
-  if (obj.downloads?.original_file_url) return obj.downloads.original_file_url;
-  if (obj.original_file_url) return obj.original_file_url;
+  // 1. Prioridade alta: propriedades com 'signed' ou 'download' no nome
+  if (typeof obj.signed_file_url === "string" && obj.signed_file_url.startsWith("http")) {
+    return obj.signed_file_url;
+  }
+  if (
+    typeof obj.downloads?.signed_file_url === "string" &&
+    obj.downloads.signed_file_url.startsWith("http")
+  ) {
+    return obj.downloads.signed_file_url;
+  }
+  if (
+    typeof obj.downloads?.original_file_url === "string" &&
+    obj.downloads.original_file_url.startsWith("http")
+  ) {
+    return obj.downloads.original_file_url;
+  }
+  if (typeof obj.original_file_url === "string" && obj.original_file_url.startsWith("http")) {
+    return obj.original_file_url;
+  }
+  if (
+    typeof obj.downloads?.zipped_file_url === "string" &&
+    obj.downloads.zipped_file_url.startsWith("http")
+  ) {
+    return obj.downloads.zipped_file_url;
+  }
 
+  // 2. Chaves específicas da Clicksign (v1 e v3)
+  if (obj.document) {
+    const found = extractSignedUrlFromAny(obj.document, depth + 1);
+    if (found) return found;
+  }
+  if (obj.downloads) {
+    const found = extractSignedUrlFromAny(obj.downloads, depth + 1);
+    if (found) return found;
+  }
   if (obj.attributes) {
-    const fromAttrs = extractSignedUrlFromAny(obj.attributes);
-    if (fromAttrs) return fromAttrs;
+    const found = extractSignedUrlFromAny(obj.attributes, depth + 1);
+    if (found) return found;
   }
-
   if (obj.data) {
-    const fromData = extractSignedUrlFromAny(obj.data);
-    if (fromData) return fromData;
+    const found = extractSignedUrlFromAny(obj.data, depth + 1);
+    if (found) return found;
   }
-
   if (Array.isArray(obj.included)) {
     for (const item of obj.included) {
-      const fromItem = extractSignedUrlFromAny(item);
-      if (fromItem) return fromItem;
+      const found = extractSignedUrlFromAny(item, depth + 1);
+      if (found) return found;
     }
   }
 
+  // 3. Varre todos os valores do objeto/array recursivamente
   if (Array.isArray(obj)) {
     for (const item of obj) {
-      const fromItem = extractSignedUrlFromAny(item);
-      if (fromItem) return fromItem;
+      const found = extractSignedUrlFromAny(item, depth + 1);
+      if (found) return found;
+    }
+  } else {
+    for (const [key, value] of Object.entries(obj)) {
+      if (key === "self" || key === "links" || key === "related") continue;
+      const found = extractSignedUrlFromAny(value, depth + 1);
+      if (found) return found;
     }
   }
 
@@ -215,13 +248,22 @@ function extractSignedUrlFromAny(obj: any): string | null {
           documentId,
         });
 
-        debugAttempts.push({
-          step: "getDocument_v3",
-          status: "ok",
-          keys: docResponse && typeof docResponse === "object" ? Object.keys(docResponse) : [],
-        });
+        const status = docResponse?.data?.attributes?.status;
+        const dlKeys = docResponse?.data?.attributes?.downloads
+          ? Object.keys(docResponse.data.attributes.downloads)
+          : [];
 
         signedUrl = extractSignedUrlFromAny(docResponse);
+
+        debugAttempts.push({
+          step: "getDocument_v3",
+          status: `st=${status || "?"},dl=[${dlKeys.join(",")}]`,
+          keys: docResponse?.data?.attributes
+            ? Object.keys(docResponse.data.attributes)
+            : docResponse
+              ? Object.keys(docResponse)
+              : [],
+        });
       } catch (error: any) {
         debugAttempts.push({ step: "getDocument_v3", error: error?.message || String(error) });
       }
@@ -234,12 +276,6 @@ function extractSignedUrlFromAny(obj: any): string | null {
           contract.clicksignEnvelopeId,
         );
 
-        debugAttempts.push({
-          step: "getEnvelopeDocuments_v3",
-          status: "ok",
-          keys: envDocs && typeof envDocs === "object" ? Object.keys(envDocs) : [],
-        });
-
         signedUrl = extractSignedUrlFromAny(envDocs);
 
         if (!documentId && envDocs?.data?.[0]?.id) {
@@ -249,6 +285,15 @@ function extractSignedUrlFromAny(obj: any): string | null {
             data: { clicksignDocumentId: documentId },
           });
         }
+
+        const firstDocAttrs = envDocs?.data?.[0]?.attributes;
+        const dlKeys = firstDocAttrs?.downloads ? Object.keys(firstDocAttrs.downloads) : [];
+
+        debugAttempts.push({
+          step: "getEnvelopeDocuments_v3",
+          status: `docs=${envDocs?.data?.length || 0},dl=[${dlKeys.join(",")}]`,
+          keys: firstDocAttrs ? Object.keys(firstDocAttrs) : [],
+        });
       } catch (error: any) {
         debugAttempts.push({ step: "getEnvelopeDocuments_v3", error: error?.message || String(error) });
       }
@@ -262,13 +307,13 @@ function extractSignedUrlFromAny(obj: any): string | null {
           "documents",
         );
 
+        signedUrl = extractSignedUrlFromAny(envWithDocs);
+
         debugAttempts.push({
           step: "getEnvelope_include_docs",
-          status: "ok",
+          status: `envSt=${envWithDocs?.data?.attributes?.status || "?"},inc=${envWithDocs?.included?.length || 0}`,
           keys: envWithDocs && typeof envWithDocs === "object" ? Object.keys(envWithDocs) : [],
         });
-
-        signedUrl = extractSignedUrlFromAny(envWithDocs);
       } catch (error: any) {
         debugAttempts.push({ step: "getEnvelope_include_docs", error: error?.message || String(error) });
       }
@@ -278,13 +323,17 @@ function extractSignedUrlFromAny(obj: any): string | null {
     if (!signedUrl && documentId) {
       try {
         const docV1: any = await clicksignClient.getDocumentV1(documentId);
-        debugAttempts.push({
-          step: "getDocument_v1",
-          status: "ok",
-          keys: docV1 && typeof docV1 === "object" ? Object.keys(docV1) : [],
-        });
+        const docObj = docV1?.document ?? docV1;
+        const status = docObj?.status;
+        const dlKeys = docObj?.downloads ? Object.keys(docObj.downloads) : [];
 
         signedUrl = extractSignedUrlFromAny(docV1);
+
+        debugAttempts.push({
+          step: "getDocument_v1",
+          status: `st=${status || "?"},dl=[${dlKeys.join(",")}]`,
+          keys: docObj ? Object.keys(docObj) : [],
+        });
       } catch (error: any) {
         debugAttempts.push({ step: "getDocument_v1", error: error?.message || String(error) });
       }
@@ -334,7 +383,7 @@ function extractSignedUrlFromAny(obj: any): string | null {
       const failureSummary = debugAttempts
         .map(
           (a) =>
-            `${a.step}: ${a.error ? `erro(${a.error})` : a.keys?.length ? `chaves[${a.keys.join(",")}]` : a.status || "sem_url"}`,
+            `${a.step}: ${a.error ? `erro(${a.error})` : a.status || "sem_url"}`,
         )
         .join(" | ");
 
