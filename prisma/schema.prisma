@@ -293,6 +293,8 @@ model RentalApplication {
   adminDecisionAt     DateTime?
   adminDecisionReason String?
 
+  adminViewedAt DateTime?
+
   contests RentalApplicationContest[]
   contract Contract?
   tenants  RentalApplicationTenant[]
@@ -303,6 +305,7 @@ model RentalApplication {
   @@index([requesterId])
   @@index([status])
   @@index([automaticDecision])
+  @@index([adminViewedAt])
 }
 
 model RentalApplicationTenant {

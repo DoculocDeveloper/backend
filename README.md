@@ -291,6 +291,9 @@ FAILED
 
 Entidade principal do fluxo de locação.
 
+Campos de controle:
+- `adminViewedAt`: Data/hora em que a consulta foi visualizada pela primeira vez por um Administrador (`null` se for nova/não visualizada).
+
 Status possíveis:
 
 ```txt
@@ -810,12 +813,57 @@ Regra:
 
 ---
 
+## Contagem de consultas não lidas (novas)
+
+Role: `ADMIN`
+
+Retorna a quantidade de consultas que ainda não foram visualizadas pelo administrador (`adminViewedAt == null`).
+
+```http
+GET /rental-applications/unread-count
+Authorization: Bearer TOKEN_ADMIN
+```
+
+Resposta:
+
+```json
+{
+  "count": 3
+}
+```
+
+---
+
 ## Detalhar consulta
 
 Role: `ADMIN` ou `REAL_ESTATE`
 
+Ao ser acessado por um usuário `ADMIN`, se a consulta ainda não possuir `adminViewedAt`, ela é automaticamente marcada como visualizada na data/hora da requisição.
+
 ```http
 GET /rental-applications/:id
+```
+
+---
+
+## Marcar consulta como visualizada
+
+Role: `ADMIN`
+
+Permite marcar explicitamente uma consulta como visualizada pelo Administrador.
+
+```http
+PATCH /rental-applications/:id/view
+Authorization: Bearer TOKEN_ADMIN
+```
+
+Resposta:
+
+```json
+{
+  "id": "uuid",
+  "adminViewedAt": "2026-10-21T11:45:00.000Z"
+}
 ```
 
 ---

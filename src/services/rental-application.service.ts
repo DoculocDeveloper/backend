@@ -140,6 +140,8 @@ async function tryCollectOragoWithRetry(
   return null;
 }
 
+export const UNREAD_NOTIFICATIONS_CUTOFF_DATE = new Date("2026-10-21T11:48:00.000Z");
+
 export class RentalApplicationService {
   private async createApplicationAndConsumeCredit(params: {
     requesterId: string;
@@ -1294,4 +1296,46 @@ export class RentalApplicationService {
       },
     });
   }
+
+  async getUnreadCount() {
+    const count = await prisma.rentalApplication.count({
+      where: {
+        adminViewedAt: null,
+        createdAt: {
+          gte: UNREAD_NOTIFICATIONS_CUTOFF_DATE,
+        },
+      },
+    });
+
+    return { count };
+  }
+
+  async markAsViewed(params: { applicationId: string }) {
+    const application = await prisma.rentalApplication.findUnique({
+      where: { id: params.applicationId },
+      select: { id: true, adminViewedAt: true },
+    });
+
+    if (!application) {
+      throw new AppError(404, "Consulta não encontrada");
+    }
+
+    if (application.adminViewedAt) {
+      return { id: application.id, adminViewedAt: application.adminViewedAt };
+    }
+
+    const updated = await prisma.rentalApplication.update({
+      where: { id: params.applicationId },
+      data: {
+        adminViewedAt: new Date(),
+      },
+      select: {
+        id: true,
+        adminViewedAt: true,
+      },
+    });
+
+    return updated;
+  }
 }
+

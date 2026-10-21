@@ -44,6 +44,12 @@ rentalApplicationRoutes.get(
 );
 
 rentalApplicationRoutes.get(
+  "/unread-count",
+  authorize(UserRole.ADMIN),
+  asyncHandler(rentalApplicationController.unreadCount),
+);
+
+rentalApplicationRoutes.get(
   "/:id",
   authorize(
     UserRole.ADMIN,
@@ -52,6 +58,12 @@ rentalApplicationRoutes.get(
     UserRole.SELLER,
   ),
   asyncHandler(rentalApplicationController.getById),
+);
+
+rentalApplicationRoutes.patch(
+  "/:id/view",
+  authorize(UserRole.ADMIN),
+  asyncHandler(rentalApplicationController.markAsViewed),
 );
 
 rentalApplicationRoutes.patch(

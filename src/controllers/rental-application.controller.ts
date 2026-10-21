@@ -365,6 +365,15 @@ export class RentalApplicationController {
       throw new AppError(403, "Acesso negado");
     }
 
+    if (request.user!.role === UserRole.ADMIN && !application.adminViewedAt) {
+      const now = new Date();
+      await prisma.rentalApplication.update({
+        where: { id: application.id },
+        data: { adminViewedAt: now },
+      });
+      application.adminViewedAt = now;
+    }
+
     const parsedOragoData = parseJsonSafe(application.oragoData);
 
     const tenantName =
@@ -481,5 +490,18 @@ export class RentalApplicationController {
     });
 
     return response.json({ application });
+  }
+
+  async unreadCount(request: Request, response: Response) {
+    const result = await rentalApplicationService.getUnreadCount();
+    return response.status(200).json(result);
+  }
+
+  async markAsViewed(request: Request, response: Response) {
+    const params = rentalApplicationParamsSchema.parse(request.params);
+    const result = await rentalApplicationService.markAsViewed({
+      applicationId: params.id,
+    });
+    return response.status(200).json(result);
   }
 }
