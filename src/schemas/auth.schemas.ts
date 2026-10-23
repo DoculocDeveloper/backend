@@ -8,18 +8,18 @@ const optionalCnpjSchema = z.preprocess(
 );
 
 const realEstateProfileTypeSchema = z
-  .enum(["COMPANY", "AUTONOMOUS_BROKER"])
-  .default("COMPANY");
+  .enum(["COMPANY", "AUTONOMOUS_BROKER"]);
 
 export const realEstateProfileSchema = z
   .object({
-    profileType: realEstateProfileTypeSchema,
+    profileType: realEstateProfileTypeSchema.optional(),
 
     name: z.string().min(3, "Informe o nome."),
-    document: z.string().min(1, "Informe o documento."),
+    document: z.string().optional(),
 
-    // Mantemos cnpj só para compatibilidade com payloads antigos.
+    // Mantemos cnpj e cpf para compatibilidade e flexibilidade.
     cnpj: z.string().optional(),
+    cpf: z.string().optional(),
 
     phone: z.string().min(8, "Informe um telefone válido."),
     responsibleName: z.string().min(3, "Informe o nome do responsável."),
@@ -33,15 +33,28 @@ export const realEstateProfileSchema = z
     state: z.string().optional(),
   })
   .superRefine((data, context) => {
-    const rawDocument = data.document || data.cnpj || "";
+    const rawDocument = (data.document || data.cnpj || data.cpf || "").replace(/\D/g, "");
 
-    if (data.profileType === "COMPANY") {
+    if (!rawDocument) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["document"],
+        message: "Informe o CPF ou CNPJ.",
+      });
+      return;
+    }
+
+    const effectiveProfileType =
+      data.profileType ??
+      (rawDocument.length === 11 ? "AUTONOMOUS_BROKER" : "COMPANY");
+
+    if (effectiveProfileType === "COMPANY") {
       const result = cnpjSchema.safeParse(rawDocument);
 
       if (!result.success) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ["document"],
+          path: [data.cnpj ? "cnpj" : "document"],
           message: "Informe um CNPJ válido.",
         });
       }
@@ -54,7 +67,7 @@ export const realEstateProfileSchema = z
     if (!result.success) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["document"],
+        path: [data.cpf ? "cpf" : "document"],
         message: "Informe um CPF válido.",
       });
     }

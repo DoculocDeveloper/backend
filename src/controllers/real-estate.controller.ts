@@ -63,6 +63,15 @@ export class RealEstateController {
                     },
                   },
                 },
+                {
+                  realEstateProfile: {
+                    is: {
+                      document: {
+                        contains: search.replace(/\D/g, ""),
+                      },
+                    },
+                  },
+                },
               ],
             }
           : {}),

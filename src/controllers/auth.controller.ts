@@ -67,11 +67,15 @@ export class AuthController {
     const isRealEstate = role === UserRole.REAL_ESTATE;
     const realEstateProfile = rest.realEstateProfile;
 
-    const profileType = realEstateProfile?.profileType ?? "COMPANY";
-    const documentType = getProfileDocumentType(profileType);
     const profileDocument = onlyDigits(
-      realEstateProfile?.document ?? realEstateProfile?.cnpj,
+      realEstateProfile?.document ??
+        realEstateProfile?.cnpj ??
+        (realEstateProfile as any)?.cpf,
     );
+    const profileType =
+      realEstateProfile?.profileType ??
+      (profileDocument.length === 11 ? "AUTONOMOUS_BROKER" : "COMPANY");
+    const documentType = getProfileDocumentType(profileType);
 
     const emailAlreadyUsed = await prisma.user.findUnique({
       where: { email: email },
