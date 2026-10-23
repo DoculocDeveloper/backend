@@ -46,6 +46,18 @@ realEstateRoutes.post(
   asyncHandler(realEstateController.createSeller),
 );
 
+realEstateRoutes.get(
+  "/:id/available-sellers",
+  authorize(UserRole.ADMIN),
+  asyncHandler(realEstateController.listAvailableSellers),
+);
+
+realEstateRoutes.post(
+  "/:id/sellers/associate",
+  authorize(UserRole.ADMIN),
+  asyncHandler(realEstateController.associateSeller),
+);
+
 realEstateRoutes.delete(
   "/:id/sellers/:sellerId",
   authorize(UserRole.ADMIN),

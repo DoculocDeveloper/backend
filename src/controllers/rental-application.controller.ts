@@ -179,17 +179,26 @@ export class RentalApplicationController {
         }
       : {};
 
-    let targetRequesterId = request.user!.id;
-    if (request.user!.role === UserRole.SELLER) {
-      if (!request.user!.realEstateId) {
-        const sellerUser = await prisma.user.findUnique({
-          where: { id: request.user!.id },
-          select: { realEstateId: true },
-        });
-        targetRequesterId = sellerUser?.realEstateId ?? request.user!.id;
-      } else {
-        targetRequesterId = request.user!.realEstateId;
+    let requesterFilter: any;
+    if (canSeeAllApplications) {
+      requesterFilter = query.requesterId ? { requesterId: query.requesterId } : {};
+    } else if (request.user!.role === UserRole.SELLER) {
+      const associations = await prisma.realEstateSeller.findMany({
+        where: { sellerId: request.user!.id },
+        select: { realEstateId: true },
+      });
+      const allowedIds = associations.map((a) => a.realEstateId);
+      if (
+        request.user!.realEstateId &&
+        !allowedIds.includes(request.user!.realEstateId)
+      ) {
+        allowedIds.push(request.user!.realEstateId);
       }
+      requesterFilter = {
+        requesterId: { in: allowedIds.length > 0 ? allowedIds : ["none"] },
+      };
+    } else {
+      requesterFilter = { requesterId: request.user!.id };
     }
 
     let baseWhere: any;
@@ -231,15 +240,10 @@ export class RentalApplicationController {
       };
     }
 
-    const where = canSeeAllApplications
-      ? {
-          requesterId: query.requesterId,
-          ...baseWhere,
-        }
-      : {
-          requesterId: targetRequesterId,
-          ...baseWhere,
-        };
+    const where = {
+      ...requesterFilter,
+      ...baseWhere,
+    };
 
     const [applications, total] = await Promise.all([
       prisma.rentalApplication.findMany({
@@ -381,13 +385,19 @@ export class RentalApplicationController {
       throw new AppError(404, "Consulta não encontrada");
     }
 
-    let sellerRealEstateId = request.user!.realEstateId;
-    if (request.user!.role === UserRole.SELLER && !sellerRealEstateId) {
-      const sellerUser = await prisma.user.findUnique({
-        where: { id: request.user!.id },
+    let sellerAllowedRealEstateIds: string[] = [];
+    if (request.user!.role === UserRole.SELLER) {
+      const associations = await prisma.realEstateSeller.findMany({
+        where: { sellerId: request.user!.id },
         select: { realEstateId: true },
       });
-      sellerRealEstateId = sellerUser?.realEstateId;
+      sellerAllowedRealEstateIds = associations.map((a) => a.realEstateId);
+      if (
+        request.user!.realEstateId &&
+        !sellerAllowedRealEstateIds.includes(request.user!.realEstateId)
+      ) {
+        sellerAllowedRealEstateIds.push(request.user!.realEstateId);
+      }
     }
 
     const canSeeApplication =
@@ -395,8 +405,7 @@ export class RentalApplicationController {
       request.user!.role === UserRole.ACCOUNT_EXECUTIVE ||
       application.requesterId === request.user!.id ||
       (request.user!.role === UserRole.SELLER &&
-        Boolean(sellerRealEstateId) &&
-        application.requesterId === sellerRealEstateId);
+        sellerAllowedRealEstateIds.includes(application.requesterId));
 
     if (!canSeeApplication) {
       throw new AppError(403, "Acesso negado");

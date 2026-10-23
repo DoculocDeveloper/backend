@@ -52,20 +52,25 @@ export class ContractController {
   }
 
   const isAdmin = request.user!.role === "ADMIN";
-  let sellerRealEstateId = request.user!.realEstateId;
-  if (request.user!.role === "SELLER" && !sellerRealEstateId) {
-    const sellerUser = await prisma.user.findUnique({
-      where: { id: request.user!.id },
+  let sellerAllowedRealEstateIds: string[] = [];
+  if (request.user!.role === "SELLER") {
+    const associations = await prisma.realEstateSeller.findMany({
+      where: { sellerId: request.user!.id },
       select: { realEstateId: true },
     });
-    sellerRealEstateId = sellerUser?.realEstateId;
+    sellerAllowedRealEstateIds = associations.map((a) => a.realEstateId);
+    if (
+      request.user!.realEstateId &&
+      !sellerAllowedRealEstateIds.includes(request.user!.realEstateId)
+    ) {
+      sellerAllowedRealEstateIds.push(request.user!.realEstateId);
+    }
   }
 
   const isOwner =
     contract.application.requesterId === request.user!.id ||
     (request.user!.role === "SELLER" &&
-      Boolean(sellerRealEstateId) &&
-      contract.application.requesterId === sellerRealEstateId);
+      sellerAllowedRealEstateIds.includes(contract.application.requesterId));
 
   if (!isAdmin && !isOwner) {
     throw new AppError(403, "Acesso negado");
@@ -124,20 +129,25 @@ export class ContractController {
     }
 
     const isAdmin = request.user!.role === "ADMIN";
-    let sellerRealEstateId = request.user!.realEstateId;
-    if (request.user!.role === "SELLER" && !sellerRealEstateId) {
-      const sellerUser = await prisma.user.findUnique({
-        where: { id: request.user!.id },
+    let sellerAllowedRealEstateIds: string[] = [];
+    if (request.user!.role === "SELLER") {
+      const associations = await prisma.realEstateSeller.findMany({
+        where: { sellerId: request.user!.id },
         select: { realEstateId: true },
       });
-      sellerRealEstateId = sellerUser?.realEstateId;
+      sellerAllowedRealEstateIds = associations.map((a) => a.realEstateId);
+      if (
+        request.user!.realEstateId &&
+        !sellerAllowedRealEstateIds.includes(request.user!.realEstateId)
+      ) {
+        sellerAllowedRealEstateIds.push(request.user!.realEstateId);
+      }
     }
 
     const isOwner =
       contract.application.requesterId === request.user!.id ||
       (request.user!.role === "SELLER" &&
-        Boolean(sellerRealEstateId) &&
-        contract.application.requesterId === sellerRealEstateId);
+        sellerAllowedRealEstateIds.includes(contract.application.requesterId));
 
     if (!isAdmin && !isOwner) {
       throw new AppError(403, "Acesso negado");

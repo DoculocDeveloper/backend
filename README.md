@@ -241,7 +241,15 @@ Perfis:
 ```txt
 ADMIN
 REAL_ESTATE
+ACCOUNT_EXECUTIVE
+SELLER
 ```
+
+### RealEstateSeller
+
+Tabela associativa para relação N:N entre Imobiliária (`REAL_ESTATE`) e Vendedor (`SELLER`):
+- Permite que um mesmo vendedor seja associado a múltiplas imobiliárias.
+- Armazena `realEstateId`, `sellerId` e data de vínculo.
 
 ### RealEstateProfile
 

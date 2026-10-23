@@ -139,11 +139,28 @@ model User {
 
   cpf          String?
   realEstateId String?
-  realEstate   User?   @relation("RealEstateSellers", fields: [realEstateId], references: [id], onDelete: Cascade)
+  realEstate   User?   @relation("RealEstateSellers", fields: [realEstateId], references: [id], onDelete: SetNull)
   sellers      User[]  @relation("RealEstateSellers")
+
+  realEstateSellerLinks RealEstateSeller[] @relation("RealEstateAssociations")
+  sellerRealEstateLinks RealEstateSeller[] @relation("SellerAssociations")
 
   @@index([realEstateId])
   @@index([cpf])
+}
+
+model RealEstateSeller {
+  id           String   @id @default(uuid())
+  realEstateId String
+  sellerId     String
+  createdAt    DateTime @default(now())
+
+  realEstate User @relation("RealEstateAssociations", fields: [realEstateId], references: [id], onDelete: Cascade)
+  seller     User @relation("SellerAssociations", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@unique([realEstateId, sellerId])
+  @@index([realEstateId])
+  @@index([sellerId])
 }
 
 model PasswordResetToken {

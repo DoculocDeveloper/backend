@@ -108,6 +108,7 @@ export class RealEstateController {
         _count: {
           select: {
             applications: true,
+            realEstateSellerLinks: true,
             sellers: true,
           },
         },
@@ -121,7 +122,7 @@ export class RealEstateController {
       realEstates: realEstates.map(({ _count, ...realEstate }) => ({
         ...realEstate,
         applicationsCount: _count.applications,
-        sellersCount: _count.sellers,
+        sellersCount: Math.max(_count.realEstateSellerLinks, _count.sellers),
       })),
     });
   }
@@ -189,6 +190,23 @@ export class RealEstateController {
       include: {
         realEstateProfile: true,
         wallet: true,
+        realEstateSellerLinks: {
+          include: {
+            seller: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                cpf: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
         sellers: {
           select: {
             id: true,
@@ -205,6 +223,7 @@ export class RealEstateController {
         _count: {
           select: {
             applications: true,
+            realEstateSellerLinks: true,
             sellers: true,
           },
         },
@@ -215,13 +234,27 @@ export class RealEstateController {
       throw new AppError(404, "Imobiliária não encontrada.");
     }
 
-    const { _count, ...rest } = realEstate;
+    const { _count, realEstateSellerLinks, sellers: legacySellers, ...rest } = realEstate;
+
+    // Unificar lista de vendedores (tabela associativa + retrocompatibilidade)
+    const sellersMap = new Map<string, any>();
+    realEstateSellerLinks.forEach((link) => {
+      sellersMap.set(link.seller.id, link.seller);
+    });
+    legacySellers.forEach((seller) => {
+      if (!sellersMap.has(seller.id)) {
+        sellersMap.set(seller.id, seller);
+      }
+    });
+
+    const unifiedSellers = Array.from(sellersMap.values());
 
     return response.json({
       realEstate: {
         ...rest,
+        sellers: unifiedSellers,
         applicationsCount: _count.applications,
-        sellersCount: _count.sellers,
+        sellersCount: unifiedSellers.length,
       },
     });
   }
@@ -229,7 +262,26 @@ export class RealEstateController {
   async listSellers(request: Request, response: Response) {
     const id = String(request.params.id);
 
-    const sellers = await prisma.user.findMany({
+    const links = await prisma.realEstateSeller.findMany({
+      where: { realEstateId: id },
+      include: {
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            cpf: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    const legacySellers = await prisma.user.findMany({
       where: {
         realEstateId: id,
         role: UserRole.SELLER,
@@ -247,7 +299,240 @@ export class RealEstateController {
       },
     });
 
-    return response.json({ sellers });
+    const sellersMap = new Map<string, any>();
+    links.forEach((l) => sellersMap.set(l.seller.id, l.seller));
+    legacySellers.forEach((s) => {
+      if (!sellersMap.has(s.id)) sellersMap.set(s.id, s);
+    });
+
+    return response.json({ sellers: Array.from(sellersMap.values()) });
+  }
+
+  async listAvailableSellers(request: Request, response: Response) {
+    const realEstateId = String(request.params.id);
+    const search =
+      typeof request.query.search === "string"
+        ? request.query.search.trim()
+        : "";
+
+    // Obter IDs dos vendedores já vinculados a esta imobiliária (tanto via link N:N quanto legado)
+    const linkedIds = new Set<string>();
+
+    try {
+      const existingLinks = await prisma.realEstateSeller.findMany({
+        where: { realEstateId },
+        select: { sellerId: true },
+      });
+      existingLinks.forEach((l) => linkedIds.add(l.sellerId));
+    } catch (e) {
+      console.warn("[listAvailableSellers] Tabela RealEstateSeller em migracao:", e);
+    }
+
+    try {
+      const legacyLinked = await prisma.user.findMany({
+        where: { realEstateId, role: UserRole.SELLER },
+        select: { id: true },
+      });
+      legacyLinked.forEach((l) => linkedIds.add(l.id));
+    } catch (e) {
+      console.warn("[listAvailableSellers] Erro ao buscar vendedores legados:", e);
+    }
+
+    const cleanCpfDigits = search.replace(/\D/g, "");
+
+    const availableSellers = await prisma.user.findMany({
+      where: {
+        role: UserRole.SELLER,
+        ...(linkedIds.size > 0
+          ? {
+              id: {
+                notIn: Array.from(linkedIds),
+              },
+            }
+          : {}),
+        ...(search
+          ? {
+              OR: [
+                {
+                  name: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  email: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+                ...(cleanCpfDigits
+                  ? [
+                      {
+                        cpf: {
+                          contains: cleanCpfDigits,
+                        },
+                      },
+                    ]
+                  : []),
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        cpf: true,
+        createdAt: true,
+        realEstate: {
+          select: {
+            id: true,
+            name: true,
+            realEstateProfile: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+        sellerRealEstateLinks: {
+          select: {
+            realEstate: {
+              select: {
+                id: true,
+                name: true,
+                realEstateProfile: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        name: "asc",
+      },
+    });
+
+    return response.json({
+      sellers: availableSellers.map((seller) => {
+        const associatedNames = new Set<string>();
+
+        if (seller.realEstate) {
+          associatedNames.add(
+            seller.realEstate.realEstateProfile?.name || seller.realEstate.name,
+          );
+        }
+
+        if (seller.sellerRealEstateLinks) {
+          seller.sellerRealEstateLinks.forEach((link) => {
+            if (link.realEstate) {
+              associatedNames.add(
+                link.realEstate.realEstateProfile?.name || link.realEstate.name,
+              );
+            }
+          });
+        }
+
+        return {
+          id: seller.id,
+          name: seller.name,
+          email: seller.email,
+          cpf: seller.cpf,
+          createdAt: seller.createdAt,
+          associatedRealEstates: Array.from(associatedNames),
+        };
+      }),
+    });
+  }
+
+  async associateSeller(request: Request, response: Response) {
+    const realEstateId = String(request.params.id);
+    const bodySchema = z.object({
+      sellerId: z.string().uuid("ID do vendedor inválido."),
+    });
+
+    const { sellerId } = bodySchema.parse(request.body);
+
+    const realEstate = await prisma.user.findFirst({
+      where: {
+        id: realEstateId,
+        role: UserRole.REAL_ESTATE,
+      },
+      select: {
+        id: true,
+        name: true,
+        realEstateProfile: { select: { name: true } },
+      },
+    });
+
+    if (!realEstate) {
+      throw new AppError(404, "Imobiliária não encontrada.");
+    }
+
+    const seller = await prisma.user.findFirst({
+      where: {
+        id: sellerId,
+        role: UserRole.SELLER,
+      },
+    });
+
+    if (!seller) {
+      throw new AppError(404, "Vendedor não encontrado.");
+    }
+
+    // Verificar se já está associado
+    let isAlreadyLinked = seller.realEstateId === realEstate.id;
+    try {
+      const existingLink = await prisma.realEstateSeller.findUnique({
+        where: {
+          realEstateId_sellerId: {
+            realEstateId: realEstate.id,
+            sellerId: seller.id,
+          },
+        },
+      });
+      if (existingLink) {
+        isAlreadyLinked = true;
+      }
+    } catch {
+      // Ignora erro se tabela estiver em criacao
+    }
+
+    if (isAlreadyLinked) {
+      throw new AppError(409, "Este vendedor já está associado a esta imobiliária.");
+    }
+
+    try {
+      await prisma.realEstateSeller.create({
+        data: {
+          realEstateId: realEstate.id,
+          sellerId: seller.id,
+        },
+      });
+    } catch (e) {
+      console.warn("[associateSeller] Falha ao criar RealEstateSeller:", e);
+    }
+
+    if (!seller.realEstateId) {
+      await prisma.user.update({
+        where: { id: seller.id },
+        data: { realEstateId: realEstate.id },
+      });
+    }
+
+    return response.status(200).json({
+      message: "Vendedor associado com sucesso.",
+      seller: {
+        id: seller.id,
+        name: seller.name,
+        email: seller.email,
+        cpf: seller.cpf,
+        createdAt: seller.createdAt,
+      },
+    });
   }
 
   async createSeller(request: Request, response: Response) {
@@ -276,24 +561,54 @@ export class RealEstateController {
     const normalizedEmail = body.email.trim().toLowerCase();
     const cleanCpf = body.cpf.replace(/\D/g, "");
 
-    const emailAlreadyInUse = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: normalizedEmail },
+          ...(cleanCpf ? [{ cpf: cleanCpf }] : []),
+        ],
+      },
     });
 
-    if (emailAlreadyInUse) {
-      throw new AppError(409, "Este e-mail já está cadastrado.");
-    }
+    if (existingUser) {
+      if (existingUser.role !== UserRole.SELLER) {
+        throw new AppError(
+          409,
+          "Já existe um usuário cadastrado com este e-mail ou CPF com outra função.",
+        );
+      }
 
-    if (cleanCpf) {
-      const cpfAlreadyInUse = await prisma.user.findFirst({
+      const alreadyLinked = await prisma.realEstateSeller.findUnique({
         where: {
-          cpf: cleanCpf,
+          realEstateId_sellerId: {
+            realEstateId: realEstate.id,
+            sellerId: existingUser.id,
+          },
         },
       });
 
-      if (cpfAlreadyInUse) {
-        throw new AppError(409, "Este CPF já está cadastrado.");
+      if (alreadyLinked || existingUser.realEstateId === realEstate.id) {
+        throw new AppError(409, "Este vendedor já está associado a esta imobiliária.");
       }
+
+      await prisma.realEstateSeller.create({
+        data: {
+          realEstateId: realEstate.id,
+          sellerId: existingUser.id,
+        },
+      });
+
+      return response.status(200).json({
+        message: "Vendedor já existente na plataforma e agora associado a esta imobiliária com sucesso.",
+        seller: {
+          id: existingUser.id,
+          name: existingUser.name,
+          email: existingUser.email,
+          cpf: existingUser.cpf,
+          role: existingUser.role,
+          createdAt: existingUser.createdAt,
+        },
+      });
     }
 
     const passwordHash = await bcrypt.hash(body.password, 10);
@@ -306,6 +621,11 @@ export class RealEstateController {
         passwordHash,
         role: UserRole.SELLER,
         realEstateId: realEstate.id,
+        sellerRealEstateLinks: {
+          create: {
+            realEstateId: realEstate.id,
+          },
+        },
       },
       select: {
         id: true,
@@ -328,23 +648,48 @@ export class RealEstateController {
     const realEstateId = String(request.params.id);
     const sellerId = String(request.params.sellerId);
 
-    const seller = await prisma.user.findFirst({
+    const link = await prisma.realEstateSeller.findUnique({
       where: {
-        id: sellerId,
-        realEstateId,
-        role: UserRole.SELLER,
+        realEstateId_sellerId: {
+          realEstateId,
+          sellerId,
+        },
       },
     });
 
-    if (!seller) {
-      throw new AppError(404, "Vendedor não encontrado para esta imobiliária.");
-    }
-
-    await prisma.user.delete({
-      where: { id: seller.id },
+    const seller = await prisma.user.findFirst({
+      where: {
+        id: sellerId,
+        role: UserRole.SELLER,
+      },
+      include: {
+        sellerRealEstateLinks: true,
+      },
     });
 
-    return response.json({ message: "Vendedor removido com sucesso." });
+    if (!seller || (!link && seller.realEstateId !== realEstateId)) {
+      throw new AppError(404, "Vínculo do vendedor com esta imobiliária não encontrado.");
+    }
+
+    if (link) {
+      await prisma.realEstateSeller.delete({
+        where: { id: link.id },
+      });
+    }
+
+    if (seller.realEstateId === realEstateId) {
+      const remainingLinks = seller.sellerRealEstateLinks.filter(
+        (l) => l.realEstateId !== realEstateId,
+      );
+      const nextRealEstateId = remainingLinks[0]?.realEstateId ?? null;
+
+      await prisma.user.update({
+        where: { id: seller.id },
+        data: { realEstateId: nextRealEstateId },
+      });
+    }
+
+    return response.json({ message: "Vendedor desvinculado com sucesso desta imobiliária." });
   }
 }
 
