@@ -6,10 +6,45 @@ import { cpfSchema, cnpjSchema } from "./document.schemas.js";
 const roundCurrency = (value: number) =>
   Math.round((value + Number.EPSILON) * 100) / 100;
 
-const currencyValueSchema = z.coerce
-  .number()
-  .nonnegative()
-  .transform(roundCurrency);
+function parsePtBrCurrency(value: unknown): unknown {
+  if (typeof value === "number") return value;
+  if (typeof value !== "string") return value;
+
+  const clean = value.trim().replace(/^R\$\s?/, "").trim();
+  if (!clean) return 0;
+
+  // Se tiver ponto e vírgula: "2.000,50" -> 2000.50
+  if (clean.includes(".") && clean.includes(",")) {
+    const num = Number(clean.replace(/\./g, "").replace(",", "."));
+    return isNaN(num) ? clean : num;
+  }
+
+  // Se tiver só vírgula: "2000,50" -> 2000.50
+  if (clean.includes(",")) {
+    const num = Number(clean.replace(",", "."));
+    return isNaN(num) ? clean : num;
+  }
+
+  // Se tiver só ponto: "2.000" ou "10.000"
+  if (clean.includes(".")) {
+    const parts = clean.split(".");
+    if (parts.length > 1 && parts.slice(1).every((p) => p.length === 3)) {
+      const num = Number(clean.replace(/\./g, ""));
+      return isNaN(num) ? clean : num;
+    }
+  }
+
+  const num = Number(clean);
+  return isNaN(num) ? clean : num;
+}
+
+const currencyValueSchema = z.preprocess(
+  parsePtBrCurrency,
+  z.coerce
+    .number()
+    .nonnegative()
+    .transform(roundCurrency),
+);
 
 const positiveCurrencyValueSchema = currencyValueSchema.refine(
   (value) => value > 0,
