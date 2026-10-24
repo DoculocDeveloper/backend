@@ -382,6 +382,8 @@ function resolveContractTemplatePath(requester?: {
 
         rentValue: formatCurrency(application.rentValue),
         condominiumValue: formatCurrency(application.condominiumValue),
+        feesValue: formatCurrency(application.feesValue ?? 0),
+        iptuValue: formatCurrency(application.feesValue ?? 0),
         adhesionFee: formatCurrency(application.adhesionFee ?? 0),
         requestedExpense: formatCurrency(application.requestedExpense),
 
