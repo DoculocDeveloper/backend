@@ -56,6 +56,21 @@ function formatCnpj(value?: string | null) {
   );
 }
 
+function formatZipCode(value?: string | null) {
+  const digits = onlyDigits(value);
+  if (digits.length !== 8) return value ?? "";
+  return digits.replace(/^(\d{5})(\d{3})$/, "$1-$2");
+}
+
+function formatComplement(value?: string | null) {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("-") || trimmed.startsWith(",")) {
+    return ` ${trimmed}`;
+  }
+  return ` - ${trimmed}`;
+}
+
 function formatPartnerDocument(params: {
   document?: string | null;
   documentType?: string | null;
@@ -156,10 +171,10 @@ function buildPartnerContractData(params: {
     partnerDocumentLabel: documentType,
     partnerDocument: formattedDocument,
 
-    partnerZipCode: profile?.zipCode ?? "",
+    partnerZipCode: formatZipCode(profile?.zipCode),
     partnerStreet: profile?.street ?? "",
     partnerNumber: profile?.number ?? "",
-    partnerComplement: profile?.complement ?? "",
+    partnerComplement: formatComplement(profile?.complement),
     partnerNeighborhood: profile?.neighborhood ?? "",
     partnerCity: profile?.city ?? "",
     partnerState: profile?.state ?? "",
@@ -242,6 +257,11 @@ const COLINA_CUSTOM_TEMPLATE_PATH = path.resolve(
   "src/templates/colina-rental-application-contract.docx",
 );
 
+const COLINA_NEW_TEMPLATE_PATH = path.resolve(
+  process.cwd(),
+  "src/templates/Termos garantia Doculoc 23.10.26 - Colina.docx",
+);
+
 const AMICI_CUSTOM_TEMPLATE_PATH = path.resolve(
   process.cwd(),
   "src/templates/amici-rental-application-contract.docx",
@@ -257,6 +277,14 @@ function resolveContractTemplatePath(requester?: {
 
   const requesterEmail = (requester?.email ?? "").toLowerCase().trim();
   const requesterCnpj = (requester?.realEstateProfile?.cnpj ?? "").replace(/\D/g, "");
+
+  // Validação temporária: usuário lucas@amicigestao.com.br valida o novo contrato da Colina
+  if (
+    requesterEmail === "lucas@amicigestao.com.br" &&
+    fs.existsSync(COLINA_NEW_TEMPLATE_PATH)
+  ) {
+    return COLINA_NEW_TEMPLATE_PATH;
+  }
 
   const isColina =
     requesterEmail === "atendimento@imobiliariacolina.com.br" ||
@@ -344,10 +372,10 @@ function resolveContractTemplatePath(requester?: {
         tenants,
         tenantCount: tenants.length,
 
-        propertyZipCode: application.propertyZipCode,
+        propertyZipCode: formatZipCode(application.propertyZipCode),
         propertyStreet: application.propertyStreet,
         propertyNumber: application.propertyNumber,
-        propertyComplement: application.propertyComplement ?? "",
+        propertyComplement: formatComplement(application.propertyComplement),
         propertyNeighborhood: application.propertyNeighborhood,
         propertyCity: application.propertyCity,
         propertyState: application.propertyState,
@@ -399,6 +427,37 @@ function resolveContractTemplatePath(requester?: {
         realEstateAddressLine: partner.partnerAddressLine,
         realEstateCityLine: partner.partnerCityLine,
 
+        tenantLine: mainTenant.tenantLine,
+        partnerLine: [
+          partner.partnerName,
+          partner.partnerDocument
+            ? `${partner.partnerDocumentLabel}: ${partner.partnerDocument}`
+            : null,
+          partner.partnerEmail ? `E-mail: ${partner.partnerEmail}` : null,
+          partner.partnerPhone ? `Tel.: ${partner.partnerPhone}` : null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+        propertyLine: [
+          application.propertyStreet
+            ? `${application.propertyStreet}${application.propertyNumber ? `, nº ${application.propertyNumber}` : ""}`
+            : null,
+          application.propertyComplement
+            ? application.propertyComplement.trim()
+            : null,
+          application.propertyNeighborhood
+            ? `Bairro: ${application.propertyNeighborhood}`
+            : null,
+          application.propertyCity && application.propertyState
+            ? `${application.propertyCity}/${application.propertyState}`
+            : null,
+          application.propertyZipCode
+            ? `CEP: ${formatZipCode(application.propertyZipCode)}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" - "),
+
         generatedAt: new Intl.DateTimeFormat("pt-BR").format(new Date()),
       });
     } catch (error) {
@@ -409,7 +468,7 @@ function resolveContractTemplatePath(requester?: {
         create: {
           applicationId: application.id,
           status: "FAILED",
-          templateName: path.basename(env.CONTRACT_TEMPLATE_PATH),
+          templateName: path.basename(templatePath),
           errorMessage:
             error instanceof Error
               ? error.message
@@ -417,6 +476,7 @@ function resolveContractTemplatePath(requester?: {
         },
         update: {
           status: "FAILED",
+          templateName: path.basename(templatePath),
           errorMessage:
             error instanceof Error
               ? error.message
@@ -451,7 +511,7 @@ function resolveContractTemplatePath(requester?: {
         create: {
           applicationId: application.id,
           status: "GENERATED",
-          templateName: path.basename(env.CONTRACT_TEMPLATE_PATH),
+          templateName: path.basename(templatePath),
 
           filePath: uploadedFile.filePath,
           fileName: uploadedFile.fileName,
@@ -466,6 +526,7 @@ function resolveContractTemplatePath(requester?: {
         },
         update: {
           status: "GENERATED",
+          templateName: path.basename(templatePath),
 
           filePath: uploadedFile.filePath,
           fileName: uploadedFile.fileName,
