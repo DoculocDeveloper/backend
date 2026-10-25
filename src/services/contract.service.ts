@@ -278,21 +278,18 @@ function resolveContractTemplatePath(requester?: {
   const requesterEmail = (requester?.email ?? "").toLowerCase().trim();
   const requesterCnpj = (requester?.realEstateProfile?.cnpj ?? "").replace(/\D/g, "");
 
-  // Validação temporária: usuário lucas@amicigestao.com.br valida o novo contrato da Colina
-  if (
-    requesterEmail === "lucas@amicigestao.com.br" &&
-    fs.existsSync(COLINA_NEW_TEMPLATE_PATH)
-  ) {
-    return COLINA_NEW_TEMPLATE_PATH;
-  }
-
   const isColina =
     requesterEmail === "atendimento@imobiliariacolina.com.br" ||
     requesterEmail === "administracao@imobiliariacolina.com.br" ||
     requesterCnpj === "30793440000104";
 
-  if (isColina && fs.existsSync(COLINA_CUSTOM_TEMPLATE_PATH)) {
-    return COLINA_CUSTOM_TEMPLATE_PATH;
+  if (isColina) {
+    if (fs.existsSync(COLINA_NEW_TEMPLATE_PATH)) {
+      return COLINA_NEW_TEMPLATE_PATH;
+    }
+    if (fs.existsSync(COLINA_CUSTOM_TEMPLATE_PATH)) {
+      return COLINA_CUSTOM_TEMPLATE_PATH;
+    }
   }
 
   const isAmici =
