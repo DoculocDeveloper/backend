@@ -329,7 +329,13 @@ function resolveContractTemplatePath(requester?: {
       linebreaks: true,
     });
 
-    const packageValue = toNumber(application.requestedExpense);
+    const rentValueNumber = toNumber(application.rentValue);
+    const condominiumValueNumber = toNumber(application.condominiumValue);
+    const feesValueNumber = toNumber(application.feesValue);
+    const packageSum =
+      rentValueNumber + condominiumValueNumber + feesValueNumber;
+    const packageValue =
+      packageSum > 0 ? packageSum : toNumber(application.requestedExpense);
     const monthlyServiceFee = packageValue * 0.1;
 
     const partner = buildPartnerContractData({
@@ -382,7 +388,7 @@ function resolveContractTemplatePath(requester?: {
         feesValue: formatCurrency(application.feesValue ?? 0),
         iptuValue: formatCurrency(application.feesValue ?? 0),
         adhesionFee: formatCurrency(application.adhesionFee ?? 0),
-        requestedExpense: formatCurrency(application.requestedExpense),
+        requestedExpense: formatCurrency(packageValue),
 
         monthlyServiceFee: formatCurrency(monthlyServiceFee),
 
