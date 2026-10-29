@@ -36,20 +36,24 @@ export class ContractController {
   }
 
   async download(request: Request, response: Response) {
-  const params = contractParamsSchema.parse(request.params);
+    const params = contractParamsSchema.parse(request.params);
 
-  const contract = await prisma.contract.findUnique({
-    where: {
-      id: params.id,
-    },
-    include: {
-      application: true,
-    },
-  });
+    let contract = await contractService.syncContractDocumentOnDownload(params.id);
 
-  if (!contract) {
-    throw new AppError(404, "Contrato não encontrado");
-  }
+    if (!contract) {
+      contract = await prisma.contract.findUnique({
+        where: {
+          id: params.id,
+        },
+        include: {
+          application: true,
+        },
+      });
+    }
+
+    if (!contract) {
+      throw new AppError(404, "Contrato não encontrado");
+    }
 
   const isAdmin = request.user!.role === "ADMIN";
   let sellerAllowedRealEstateIds: string[] = [];
