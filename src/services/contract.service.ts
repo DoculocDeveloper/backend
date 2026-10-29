@@ -345,7 +345,7 @@ async function renderAndUploadContractDocument(params: {
         ];
 
   const mainTenant = tenants[0];
-  const allTenantsLines = tenants.map((t: any) => t.tenantLine).join("\n");
+  const allTenantsLines = tenants.map((t: any) => t.tenantLine).join("\n\n");
 
   doc.render({
     tenantName: mainTenant.name,
