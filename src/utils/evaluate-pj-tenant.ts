@@ -230,12 +230,12 @@ export function evaluatePjTenant(
   }
 
   return {
-    status: "approved",
+    status: "manual_review",
     recommendation: "recommended",
     requestedExpense,
     housingExpense,
     reasons: [
-      "A Órago recomendou a análise, indicadores de risco favoráveis e despesa informada dentro da capacidade estimada.",
+      "A Órago recomendou a análise e os indicadores são favoráveis, mas consultas de CNPJ exigem aprovação manual do administrador.",
     ],
     metadata: {
       decisionSource: "ORAGO_AND_DOCULOC_HOUSING_RULE",
@@ -251,6 +251,7 @@ export function evaluatePjTenant(
       companyRiskLevel,
       isRecentCompany,
       isHighRentalRisk,
+      requiresManualApprovalForCnpj: true,
     },
   };
 }
