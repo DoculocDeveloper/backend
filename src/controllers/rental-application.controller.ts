@@ -51,6 +51,15 @@ export class RentalApplicationController {
       return response.status(202).json(result);
     }
 
+    if ("application" in result && result.application) {
+      const sanitized = {
+        ...result.application,
+        oragoData: undefined,
+        oragoRawResponse: undefined,
+      };
+      return response.status(201).json({ ...result, application: sanitized });
+    }
+
     return response.status(201).json(result);
   }
 
@@ -64,6 +73,15 @@ export class RentalApplicationController {
 
     if ("pending" in result && result.pending) {
       return response.status(202).json(result);
+    }
+
+    if ("application" in result && result.application) {
+      const sanitized = {
+        ...result.application,
+        oragoData: undefined,
+        oragoRawResponse: undefined,
+      };
+      return response.status(201).json({ ...result, application: sanitized });
     }
 
     return response.status(201).json(result);
@@ -296,9 +314,13 @@ export class RentalApplicationController {
       prisma.rentalApplication.count({ where }),
     ]);
 
+    const isAdmin = request.user!.role === UserRole.ADMIN;
+
     return response.json({
       applications: applications.map((application) => ({
         ...application,
+        oragoData: isAdmin ? application.oragoData : undefined,
+        oragoRawResponse: undefined,
         decisionReasons: JSON.parse(application.decisionReasons),
         decisionMetadata: application.decisionMetadata
           ? JSON.parse(application.decisionMetadata)
@@ -324,6 +346,16 @@ export class RentalApplicationController {
 
     if (result.status === "PROCESSING") {
       return response.status(202).json(result);
+    }
+
+    const isAdmin = request.user!.role === UserRole.ADMIN;
+    if (!isAdmin && "application" in result && (result as any).application) {
+      const sanitized = {
+        ...(result as any).application,
+        oragoData: undefined,
+        oragoRawResponse: undefined,
+      };
+      return response.json({ ...result, application: sanitized });
     }
 
     return response.json(result);
@@ -447,6 +479,8 @@ export class RentalApplicationController {
             ]
           : [];
 
+    const isAdmin = request.user!.role === UserRole.ADMIN;
+
     return response.json({
       application: {
         ...application,
@@ -458,7 +492,7 @@ export class RentalApplicationController {
           ? JSON.parse(application.decisionMetadata)
           : null,
         oragoRawResponse: undefined,
-        oragoData: parsedOragoData,
+        oragoData: isAdmin ? parsedOragoData : undefined,
       },
     });
   }
@@ -486,7 +520,15 @@ export class RentalApplicationController {
       data: body,
     });
 
-    return response.json({ application });
+    const isAdmin = request.user!.role === UserRole.ADMIN;
+
+    return response.json({
+      application: {
+        ...application,
+        oragoData: isAdmin ? application.oragoData : undefined,
+        oragoRawResponse: undefined,
+      },
+    });
   }
 
   async contest(request: Request, response: Response) {
