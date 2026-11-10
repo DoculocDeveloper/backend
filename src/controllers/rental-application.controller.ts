@@ -458,7 +458,7 @@ export class RentalApplicationController {
           ? JSON.parse(application.decisionMetadata)
           : null,
         oragoRawResponse: undefined,
-        oragoData: undefined,
+        oragoData: parsedOragoData,
       },
     });
   }
