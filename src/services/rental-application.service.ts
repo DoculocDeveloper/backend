@@ -59,9 +59,13 @@ function mapRecommendationStatus(status: string) {
   return "UNKNOWN";
 }
 
-function getInitialWorkflowStatus(decisionStatus: string) {
+function getInitialWorkflowStatus(
+  decisionStatus: string,
+  recommendationStatus?: string,
+) {
   if (decisionStatus === "APPROVED") return "WAITING_CONTRACT_DATA";
   if (decisionStatus === "REJECTED") return "REJECTED";
+  if (recommendationStatus === "RECOMMENDED") return "REJECTED";
   return "CONSULTED";
 }
 
@@ -308,7 +312,10 @@ export class RentalApplicationService {
 
     const automaticDecision = mapDecisionStatus(decision.status);
     const recommendation = mapRecommendationStatus(decision.recommendation);
-    const workflowStatus = getInitialWorkflowStatus(automaticDecision);
+    const workflowStatus = getInitialWorkflowStatus(
+      automaticDecision,
+      recommendation,
+    );
 
     const application = await this.createApplicationAndConsumeCredit({
       requesterId: params.requesterId,
