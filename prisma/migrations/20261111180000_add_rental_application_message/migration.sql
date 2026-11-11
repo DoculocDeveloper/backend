@@ -38,3 +38,4 @@ BEGIN
         ALTER TABLE "RentalApplicationMessage" ADD CONSTRAINT "RentalApplicationMessage_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
     END IF;
 END $$;
+
