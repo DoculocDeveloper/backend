@@ -62,16 +62,32 @@ export const rentalApplicationStatusSchema = z.enum([
   "CANCELLED",
 ]);
 
-export const createRentalApplicationByCpfSchema = z.object({
-  cpf: cpfSchema,
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
-  selfie: z.string().optional(),
+export const createRentalApplicationByCpfSchema = z
+  .object({
+    cpf: cpfSchema,
+    secondCpf: cpfSchema.optional().nullable(),
+    email: z.string().email().optional(),
+    phone: z.string().optional(),
+    selfie: z.string().optional(),
 
-  rentValue: positiveCurrencyValueSchema,
-  condominiumValue: currencyValueSchema,
-  feesValue: currencyValueSchema,
-});
+    rentValue: positiveCurrencyValueSchema,
+    condominiumValue: currencyValueSchema,
+    feesValue: currencyValueSchema,
+  })
+  .refine(
+    (data) => {
+      if (data.secondCpf) {
+        const cpf1 = data.cpf.replace(/\D/g, "");
+        const cpf2 = data.secondCpf.replace(/\D/g, "");
+        return cpf1 !== cpf2;
+      }
+      return true;
+    },
+    {
+      message: "O segundo CPF não pode ser igual ao primeiro.",
+      path: ["secondCpf"],
+    },
+  );
 
 export const createRentalApplicationByCnpjSchema = z.object({
   cnpj: cnpjSchema,

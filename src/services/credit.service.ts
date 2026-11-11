@@ -5,7 +5,7 @@ import { AppError } from "../middlewares/error-handler.js";
 import { prisma } from "../lib/prisma.js";
 
 export class CreditService {
-  async ensureCanConsult(userId: string) {
+  async ensureCanConsult(userId: string, requiredCredits: number = 1) {
     const wallet = await prisma.userCreditWallet.findUnique({
       where: { userId },
     });
@@ -18,8 +18,13 @@ export class CreditService {
       return wallet;
     }
 
-    if (wallet.availableCredits <= 0) {
-      throw new AppError(402, "Usuário sem consultas disponíveis");
+    if (wallet.availableCredits < requiredCredits) {
+      throw new AppError(
+        402,
+        requiredCredits > 1
+          ? `Você precisa de pelo menos ${requiredCredits} consultas disponíveis para realizar esta análise conjunta.`
+          : "Usuário sem consultas disponíveis",
+      );
     }
 
     return wallet;

@@ -56,6 +56,10 @@ export class RentalApplicationController {
         ...result.application,
         oragoData: undefined,
         oragoRawResponse: undefined,
+        tenants: (result.application as any).tenants?.map((t: any) => ({
+          ...t,
+          oragoData: undefined,
+        })),
       };
       return response.status(201).json({ ...result, application: sanitized });
     }
@@ -80,6 +84,10 @@ export class RentalApplicationController {
         ...result.application,
         oragoData: undefined,
         oragoRawResponse: undefined,
+        tenants: (result.application as any).tenants?.map((t: any) => ({
+          ...t,
+          oragoData: undefined,
+        })),
       };
       return response.status(201).json({ ...result, application: sanitized });
     }
@@ -354,6 +362,10 @@ export class RentalApplicationController {
         ...(result as any).application,
         oragoData: undefined,
         oragoRawResponse: undefined,
+        tenants: (result as any).application.tenants?.map((t: any) => ({
+          ...t,
+          oragoData: undefined,
+        })),
       };
       return response.json({ ...result, application: sanitized });
     }
@@ -481,12 +493,17 @@ export class RentalApplicationController {
 
     const isAdmin = request.user!.role === UserRole.ADMIN;
 
+    const sanitizedTenants = tenants.map((tenant) => ({
+      ...tenant,
+      oragoData: isAdmin ? parseJsonSafe((tenant as any).oragoData) : undefined,
+    }));
+
     return response.json({
       application: {
         ...application,
         tenantName,
         tenantDocument,
-        tenants,
+        tenants: sanitizedTenants,
         decisionReasons: JSON.parse(application.decisionReasons),
         decisionMetadata: application.decisionMetadata
           ? JSON.parse(application.decisionMetadata)
