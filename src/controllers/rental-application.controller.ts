@@ -317,6 +317,16 @@ export class RentalApplicationController {
               order: "asc",
             },
           },
+          _count: {
+            select: {
+              messages: {
+                where: {
+                  readAt: null,
+                  isStaff: !canSeeAllApplications,
+                },
+              },
+            },
+          },
         },
       }),
       prisma.rentalApplication.count({ where }),
@@ -325,15 +335,20 @@ export class RentalApplicationController {
     const isAdmin = request.user!.role === UserRole.ADMIN;
 
     return response.json({
-      applications: applications.map((application) => ({
-        ...application,
-        oragoData: isAdmin ? application.oragoData : undefined,
-        oragoRawResponse: undefined,
-        decisionReasons: JSON.parse(application.decisionReasons),
-        decisionMetadata: application.decisionMetadata
-          ? JSON.parse(application.decisionMetadata)
-          : null,
-      })),
+      applications: applications.map((application) => {
+        const unreadCount = (application as any)._count?.messages ?? 0;
+        return {
+          ...application,
+          oragoData: isAdmin ? application.oragoData : undefined,
+          oragoRawResponse: undefined,
+          decisionReasons: JSON.parse(application.decisionReasons),
+          decisionMetadata: application.decisionMetadata
+            ? JSON.parse(application.decisionMetadata)
+            : null,
+          unreadMessagesCount: unreadCount,
+          hasUnreadMessages: unreadCount > 0,
+        };
+      }),
       meta: {
         page: query.page,
         perPage: query.perPage,
@@ -422,6 +437,19 @@ export class RentalApplicationController {
             order: "asc",
           },
         },
+        _count: {
+          select: {
+            messages: {
+              where: {
+                readAt: null,
+                isStaff: !(
+                  request.user!.role === UserRole.ADMIN ||
+                  request.user!.role === UserRole.ACCOUNT_EXECUTIVE
+                ),
+              },
+            },
+          },
+        },
       },
     });
 
@@ -508,6 +536,8 @@ export class RentalApplicationController {
         decisionMetadata: application.decisionMetadata
           ? JSON.parse(application.decisionMetadata)
           : null,
+        unreadMessagesCount: (application as any)._count?.messages ?? 0,
+        hasUnreadMessages: ((application as any)._count?.messages ?? 0) > 0,
         oragoRawResponse: undefined,
         oragoData: isAdmin ? parsedOragoData : undefined,
       },
