@@ -45,16 +45,17 @@ export class StorageService {
 
   async upload(input: UploadInput): Promise<UploadedFile> {
     if (env.STORAGE_DRIVER === "local") {
-      fs.mkdirSync(env.CONTRACT_OUTPUT_DIR, { recursive: true });
-
       const outputDir = path.resolve(env.CONTRACT_OUTPUT_DIR);
-      const filePath = path.join(outputDir, input.fileName);
+      const filePath = path.isAbsolute(input.key)
+        ? input.key
+        : path.join(outputDir, input.key || input.fileName);
 
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
       fs.writeFileSync(filePath, input.buffer);
 
       return {
         storageDriver: "local",
-        storageKey: filePath,
+        storageKey: input.key || filePath,
         filePath,
         fileName: input.fileName,
         mimeType: input.mimeType,
@@ -90,10 +91,15 @@ export class StorageService {
     filePath?: string | null;
   }) {
     if (env.STORAGE_DRIVER === "local") {
-      const localPath = params.filePath ?? params.key;
+      const outputDir = path.resolve(env.CONTRACT_OUTPUT_DIR);
+      let localPath = params.filePath ?? params.key;
 
-      if (!localPath) {
-        throw new Error("Caminho local do arquivo não informado");
+      if (localPath && !path.isAbsolute(localPath)) {
+        localPath = path.join(outputDir, localPath);
+      }
+
+      if (!localPath || !fs.existsSync(localPath)) {
+        throw new Error("Arquivo não encontrado no armazenamento local");
       }
 
       return fs.readFileSync(localPath);

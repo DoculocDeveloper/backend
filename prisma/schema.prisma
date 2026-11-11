@@ -136,6 +136,7 @@ model User {
 
   createdContests  RentalApplicationContest[] @relation("CreatedContests")
   reviewedContests RentalApplicationContest[] @relation("ReviewedContests")
+  applicationMessages RentalApplicationMessage[] @relation("UserApplicationMessages")
 
   cpf          String?
   realEstateId String?
@@ -319,6 +320,7 @@ model RentalApplication {
   contests RentalApplicationContest[]
   contract Contract?
   tenants  RentalApplicationTenant[]
+  messages RentalApplicationMessage[]
 
   isJointApplication  Boolean  @default(false)
   totalPresumedIncome Decimal?
@@ -387,6 +389,30 @@ model RentalApplicationContest {
   @@index([applicationId])
   @@index([createdById])
   @@index([status])
+}
+
+model RentalApplicationMessage {
+  id            String   @id @default(uuid())
+  applicationId String
+  application   RentalApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  senderId      String
+  sender        User     @relation("UserApplicationMessages", fields: [senderId], references: [id])
+  isStaff       Boolean  @default(false)
+
+  content       String
+
+  attachmentKey       String?
+  attachmentFileName  String?
+  attachmentMimeType  String?
+  attachmentSizeBytes Int?
+
+  readAt        DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([applicationId])
+  @@index([senderId])
+  @@index([createdAt])
 }
 
 model Contract {
