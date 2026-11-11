@@ -12,6 +12,7 @@ import { ClicksignClient } from "./clicksign-client.js";
 // Utils
 import { extractApplicantName } from "../utils/extract-applicant-name.js";
 import { evaluateTenant } from "../utils/evaluate-tenant.js";
+import { parseCurrencyRange } from "../utils/parse-currency-range.js";
 
 const creditService = new CreditService();
 const clicksignClient = new ClicksignClient();
@@ -19,6 +20,7 @@ const clicksignClient = new ClicksignClient();
 type CreateByCpfInput = {
   requesterId: string;
   cpf: string;
+  secondCpf?: string | null;
   email?: string;
   phone?: string;
   selfie?: string;
@@ -150,7 +152,10 @@ export class RentalApplicationService {
   private async createApplicationAndConsumeCredit(params: {
     requesterId: string;
     data: Parameters<typeof prisma.rentalApplication.create>[0]["data"];
+    creditsToConsume?: number;
   }) {
+    const creditsToConsume = params.creditsToConsume ?? 1;
+
     return prisma.$transaction(async (tx) => {
       const wallet = await tx.userCreditWallet.findUnique({
         where: { userId: params.requesterId },
@@ -160,8 +165,13 @@ export class RentalApplicationService {
         throw new AppError(403, "Carteira de créditos não encontrada");
       }
 
-      if (!wallet.isVip && wallet.availableCredits <= 0) {
-        throw new AppError(402, "Usuário sem consultas disponíveis");
+      if (!wallet.isVip && wallet.availableCredits < creditsToConsume) {
+        throw new AppError(
+          402,
+          creditsToConsume > 1
+            ? `Você precisa de pelo menos ${creditsToConsume} consultas disponíveis para realizar esta análise conjunta.`
+            : "Usuário sem consultas disponíveis",
+        );
       }
 
       const createdApplication = await tx.rentalApplication.create({
@@ -186,7 +196,7 @@ export class RentalApplicationService {
         where: { userId: params.requesterId },
         data: {
           availableCredits: {
-            decrement: 1,
+            decrement: creditsToConsume,
           },
         },
       });
@@ -195,9 +205,9 @@ export class RentalApplicationService {
         data: {
           userId: params.requesterId,
           type: "CONSULT_USED",
-          amount: -1,
+          amount: -creditsToConsume,
           balanceAfter: updatedWallet.availableCredits,
-          reason: `Crédito consumido na consulta. Application: ${createdApplication.id}`,
+          reason: `${creditsToConsume} crédito(s) consumido(s) na consulta. Application: ${createdApplication.id}`,
         },
       });
 
@@ -206,6 +216,7 @@ export class RentalApplicationService {
   }
 
   private async assertDocumentWasNotConsulted(document: string) {
+    const digits = document.replace(/\D/g, "");
     const existingApplication = await prisma.rentalApplication.findUnique({
       where: {
         document,
@@ -219,7 +230,19 @@ export class RentalApplicationService {
       },
     });
 
-    if (existingApplication) {
+    const existingTenant = await prisma.rentalApplicationTenant.findFirst({
+      where: {
+        document: {
+          contains: digits,
+        },
+      },
+      select: {
+        id: true,
+        applicationId: true,
+      },
+    });
+
+    if (existingApplication || existingTenant) {
       throw new AppError(
         409,
         "Este CPF/CNPJ já possui uma consulta cadastrada. Não é permitido consultar o mesmo documento novamente.",
@@ -231,6 +254,7 @@ export class RentalApplicationService {
   private async createConsultLock(params: {
     requesterId: string;
     document: string;
+    secondDocument?: string | null;
     documentType: "CPF" | "CNPJ";
     rentValue: number;
     condominiumValue: number;
@@ -241,6 +265,7 @@ export class RentalApplicationService {
         data: {
           requesterId: params.requesterId,
           document: params.document,
+          secondDocument: params.secondDocument,
           documentType: params.documentType,
           status: "PROCESSING",
           rentValue: params.rentValue,
@@ -271,10 +296,17 @@ export class RentalApplicationService {
     rentValue: number;
     condominiumValue: number;
     feesValue: number;
+    email?: string;
+    phone?: string;
   }) {
     const existingApplication = await prisma.rentalApplication.findUnique({
       where: {
         document: params.document,
+      },
+      include: {
+        tenants: {
+          orderBy: { order: "asc" },
+        },
       },
     });
 
@@ -317,8 +349,14 @@ export class RentalApplicationService {
       recommendation,
     );
 
+    const incomeRange = parseCurrencyRange(
+      params.collectResponse.data?.financial?.presumed_income,
+    );
+    const presumedIncome = incomeRange.max ?? incomeRange.min ?? null;
+
     const application = await this.createApplicationAndConsumeCredit({
       requesterId: params.requesterId,
+      creditsToConsume: 1,
       data: {
         documentType: params.documentType,
         document: params.document,
@@ -326,10 +364,14 @@ export class RentalApplicationService {
 
         tenantName,
         tenantDocument: params.document,
+        tenantEmail: params.email ?? null,
+        tenantPhone: params.phone ?? null,
 
         oragoAnalysisId: params.oragoAnalysisId,
         oragoRawResponse: JSON.stringify(params.collectResponse),
         oragoData: JSON.stringify(params.collectResponse.data),
+
+        products: JSON.stringify(params.collectResponse.products ?? null),
 
         rentValue: params.rentValue,
         condominiumValue: params.condominiumValue,
@@ -348,6 +390,31 @@ export class RentalApplicationService {
           : null,
 
         status: workflowStatus,
+        isJointApplication: false,
+        totalPresumedIncome: presumedIncome,
+
+        tenants: {
+          create: [
+            {
+              order: 1,
+              name:
+                tenantName ||
+                (params.documentType === "CPF"
+                  ? "Locatário Principal"
+                  : "Empresa Locatária"),
+              document: params.document,
+              email: params.email ?? "",
+              phone: params.phone ?? "",
+              oragoAnalysisId: params.oragoAnalysisId,
+              oragoData: JSON.stringify(params.collectResponse.data),
+              presumedIncome,
+              incomePercentage: 100,
+              isPrimaryIncome: true,
+              recommendation,
+              decisionReasons: JSON.stringify(decision.reasons),
+            },
+          ],
+        },
       },
     });
 
@@ -367,10 +434,301 @@ export class RentalApplicationService {
     };
   }
 
-  async createByCpf(input: CreateByCpfInput) {
-    await this.assertDocumentWasNotConsulted(input.cpf);
+  private async finalizeJointOragoConsult(params: {
+    lockId: string;
+    requesterId: string;
+    document: string;
+    secondDocument: string;
+    oragoAnalysisId: string;
+    secondOragoAnalysisId: string;
+    collectResponse: any;
+    secondCollectResponse: any;
+    rentValue: number;
+    condominiumValue: number;
+    feesValue: number;
+    email?: string;
+    phone?: string;
+  }) {
+    const existingApplication = await prisma.rentalApplication.findUnique({
+      where: {
+        document: params.document,
+      },
+      include: {
+        tenants: {
+          orderBy: { order: "asc" },
+        },
+      },
+    });
 
-    await creditService.ensureCanConsult(input.requesterId);
+    if (existingApplication) {
+      await prisma.oragoConsultLock.update({
+        where: {
+          id: params.lockId,
+        },
+        data: {
+          status: "COMPLETED",
+          errorMessage: null,
+        },
+      });
+
+      return {
+        application: existingApplication,
+        decision: null,
+      };
+    }
+
+    const requestedExpense =
+      params.rentValue + params.condominiumValue + params.feesValue;
+
+    // 1. Locatário 1
+    const decision1 = evaluateTenant({
+      documentType: "CPF",
+      oragoData: params.collectResponse.data,
+      input: {
+        rentValue: params.rentValue,
+        condominiumValue: params.condominiumValue,
+        feesValue: params.feesValue,
+      },
+    });
+    const tenantName1 =
+      extractApplicantName("CPF", params.collectResponse.data) || "Locatário 1";
+    const incomeRange1 = parseCurrencyRange(
+      params.collectResponse.data?.financial?.presumed_income,
+    );
+    const income1 = incomeRange1.max ?? incomeRange1.min ?? 0;
+    const rec1 = mapRecommendationStatus(decision1.recommendation);
+
+    // 2. Locatário 2
+    const decision2 = evaluateTenant({
+      documentType: "CPF",
+      oragoData: params.secondCollectResponse.data,
+      input: {
+        rentValue: params.rentValue,
+        condominiumValue: params.condominiumValue,
+        feesValue: params.feesValue,
+      },
+    });
+    const tenantName2 =
+      extractApplicantName("CPF", params.secondCollectResponse.data) ||
+      "Locatário 2";
+    const incomeRange2 = parseCurrencyRange(
+      params.secondCollectResponse.data?.financial?.presumed_income,
+    );
+    const income2 = incomeRange2.max ?? incomeRange2.min ?? 0;
+    const rec2 = mapRecommendationStatus(decision2.recommendation);
+
+    // 3. Composição de Renda
+    const totalPresumedIncome = income1 + income2;
+    const isPrimary1 = income1 >= income2;
+    const isPrimary2 = !isPrimary1;
+    const percent1 =
+      totalPresumedIncome > 0 ? (income1 / totalPresumedIncome) * 100 : 50;
+    const percent2 =
+      totalPresumedIncome > 0 ? (income2 / totalPresumedIncome) * 100 : 50;
+
+    const combinedIncomeMin =
+      (incomeRange1.min ?? 0) + (incomeRange2.min ?? 0);
+    const combinedIncomeMax =
+      (incomeRange1.max ?? 0) + (incomeRange2.max ?? 0);
+    const combinedHousingExpenseMin =
+      combinedIncomeMin > 0 ? combinedIncomeMin * 0.3 : null;
+    const combinedHousingExpenseMax =
+      combinedIncomeMax > 0 ? combinedIncomeMax * 0.3 : null;
+
+    // 4. Matriz de Decisão:
+    // Regra do Usuário: "se 1 recomendar e outro tiver apontamentos, ficar como em analise."
+    const isRec1 = decision1.recommendation === "recommended";
+    const isRec2 = decision2.recommendation === "recommended";
+    const isNotRec1 = decision1.recommendation === "not_recommended";
+    const isNotRec2 = decision2.recommendation === "not_recommended";
+
+    let automaticDecision: "APPROVED" | "REJECTED" | "MANUAL_REVIEW" =
+      "MANUAL_REVIEW";
+    let recommendation: "RECOMMENDED" | "NOT_RECOMMENDED" | "UNKNOWN" =
+      "UNKNOWN";
+    let workflowStatus: "WAITING_CONTRACT_DATA" | "REJECTED" | "CONSULTED" =
+      "CONSULTED";
+    let reasons: string[] = [];
+
+    if (isRec1 && isRec2) {
+      if (
+        combinedHousingExpenseMax &&
+        requestedExpense <= combinedHousingExpenseMax
+      ) {
+        automaticDecision = "APPROVED";
+        recommendation = "RECOMMENDED";
+        workflowStatus = "WAITING_CONTRACT_DATA";
+        reasons = [
+          "Ambos os locatários foram recomendados pela Órago e a renda combinada cobre a despesa locatícia.",
+        ];
+      } else {
+        automaticDecision = "MANUAL_REVIEW";
+        recommendation = "UNKNOWN";
+        workflowStatus = "CONSULTED";
+        reasons = [
+          `Ambos os locatários foram recomendados, mas a despesa de R$ ${requestedExpense.toFixed(
+            2,
+          )} excede o limite somado de moradia de R$ ${(
+            combinedHousingExpenseMax ?? 0
+          ).toFixed(2)}.`,
+        ];
+      }
+    } else if (isNotRec1 && isNotRec2) {
+      automaticDecision = "REJECTED";
+      recommendation = "NOT_RECOMMENDED";
+      workflowStatus = "REJECTED";
+      reasons = [
+        "Ambos os locatários retornaram como não recomendados na análise Órago.",
+      ];
+    } else {
+      // 1 recomendou e o outro teve apontamentos / atenção / desconhecido -> Em Análise Manual
+      automaticDecision = "MANUAL_REVIEW";
+      recommendation = "UNKNOWN";
+      workflowStatus = "CONSULTED";
+      const pointedTenant = !isRec1 ? tenantName1 : tenantName2;
+      reasons = [
+        `Composição com apontamento: ${pointedTenant} possui apontamentos na Órago. Enviado para análise manual Doculoc.`,
+      ];
+    }
+
+    const application = await this.createApplicationAndConsumeCredit({
+      requesterId: params.requesterId,
+      creditsToConsume: 2,
+      data: {
+        documentType: "CPF",
+        document: params.document,
+        requesterId: params.requesterId,
+
+        tenantName: tenantName1,
+        tenantDocument: params.document,
+        tenantEmail: params.email,
+        tenantPhone: params.phone,
+
+        oragoAnalysisId: params.oragoAnalysisId,
+        oragoRawResponse: JSON.stringify(params.collectResponse),
+        oragoData: JSON.stringify(params.collectResponse.data),
+
+        products: JSON.stringify({
+          basic_data: true,
+          default_financial: true,
+          judicial: true,
+          ai: true,
+        }),
+
+        rentValue: params.rentValue,
+        condominiumValue: params.condominiumValue,
+        feesValue: params.feesValue,
+        requestedExpense,
+
+        automaticDecision,
+        recommendation,
+
+        housingExpenseMin: combinedHousingExpenseMin,
+        housingExpenseMax: combinedHousingExpenseMax,
+
+        decisionReasons: JSON.stringify(reasons),
+        decisionMetadata: JSON.stringify({
+          isJointApplication: true,
+          tenant1: {
+            name: tenantName1,
+            document: params.document,
+            income: income1,
+            incomePercentage: percent1,
+            isPrimaryIncome: isPrimary1,
+            recommendation: rec1,
+            decisionReasons: decision1.reasons,
+          },
+          tenant2: {
+            name: tenantName2,
+            document: params.secondDocument,
+            income: income2,
+            incomePercentage: percent2,
+            isPrimaryIncome: isPrimary2,
+            recommendation: rec2,
+            decisionReasons: decision2.reasons,
+          },
+          combinedIncome: {
+            total: totalPresumedIncome,
+            min: combinedIncomeMin,
+            max: combinedIncomeMax,
+            housingExpenseMax: combinedHousingExpenseMax,
+          },
+        }),
+
+        status: workflowStatus,
+        isJointApplication: true,
+        totalPresumedIncome,
+
+        tenants: {
+          create: [
+            {
+              order: 1,
+              name: tenantName1,
+              document: params.document,
+              email: params.email ?? "",
+              phone: params.phone ?? "",
+              oragoAnalysisId: params.oragoAnalysisId,
+              oragoData: JSON.stringify(params.collectResponse.data),
+              presumedIncome: income1,
+              incomePercentage: percent1,
+              isPrimaryIncome: isPrimary1,
+              recommendation: rec1,
+              decisionReasons: JSON.stringify(decision1.reasons),
+            },
+            {
+              order: 2,
+              name: tenantName2,
+              document: params.secondDocument,
+              email: "",
+              phone: "",
+              oragoAnalysisId: params.secondOragoAnalysisId,
+              oragoData: JSON.stringify(params.secondCollectResponse.data),
+              presumedIncome: income2,
+              incomePercentage: percent2,
+              isPrimaryIncome: isPrimary2,
+              recommendation: rec2,
+              decisionReasons: JSON.stringify(decision2.reasons),
+            },
+          ],
+        },
+      },
+    });
+
+    await prisma.oragoConsultLock.update({
+      where: {
+        id: params.lockId,
+      },
+      data: {
+        status: "COMPLETED",
+        errorMessage: null,
+      },
+    });
+
+    return {
+      application,
+      decision: {
+        status: automaticDecision,
+        recommendation,
+        requestedExpense,
+        housingExpense: {
+          min: combinedHousingExpenseMin,
+          max: combinedHousingExpenseMax,
+        },
+        reasons,
+      },
+    };
+  }
+
+  async createByCpf(input: CreateByCpfInput) {
+    const isJoint = Boolean(input.secondCpf);
+
+    await this.assertDocumentWasNotConsulted(input.cpf);
+    if (input.secondCpf) {
+      await this.assertDocumentWasNotConsulted(input.secondCpf);
+    }
+
+    const creditsNeeded = isJoint ? 2 : 1;
+    await creditService.ensureCanConsult(input.requesterId, creditsNeeded);
 
     const existingLock = await prisma.oragoConsultLock.findUnique({
       where: {
@@ -381,6 +739,7 @@ export class RentalApplicationService {
         requesterId: true,
         status: true,
         document: true,
+        secondDocument: true,
         documentType: true,
       },
     });
@@ -413,6 +772,8 @@ export class RentalApplicationService {
             status: "PROCESSING",
             errorMessage: null,
             oragoAnalysisId: null,
+            secondOragoAnalysisId: null,
+            secondDocument: input.secondCpf ?? null,
             rentValue: input.rentValue,
             condominiumValue: input.condominiumValue,
             feesValue: input.feesValue,
@@ -429,6 +790,7 @@ export class RentalApplicationService {
       lock = await this.createConsultLock({
         requesterId: input.requesterId,
         document: input.cpf,
+        secondDocument: input.secondCpf ?? null,
         documentType: "CPF",
         rentValue: input.rentValue,
         condominiumValue: input.condominiumValue,
@@ -436,66 +798,136 @@ export class RentalApplicationService {
       });
     }
 
+    const oragoProducts = {
+      basic_data: true,
+      default_financial: true,
+      judicial: true,
+      ai: true,
+      antifraud: false,
+      antifraud_pix: false,
+      antifraud_quiz: false,
+      banking_history: false,
+      advanced_financial: false,
+      pre_visit: false,
+      pre_visit_judicial: false,
+      financial_open_finance: false,
+      biometrics_with_liveness: false,
+    };
+
     try {
-      const oragoCreateResponse = await oragoClient.createPfAnalysis({
-        cpf: input.cpf,
-        email: input.email,
-        phone: input.phone,
-        selfie: input.selfie,
-        products: {
-          basic_data: true,
-          default_financial: true,
-          judicial: true,
-          ai: true,
-          antifraud: false,
-          antifraud_pix: false,
-          antifraud_quiz: false,
-          banking_history: false,
-          advanced_financial: false,
-          pre_visit: false,
-          pre_visit_judicial: false,
-          financial_open_finance: false,
-          biometrics_with_liveness: false,
-        },
-      });
+      if (!isJoint) {
+        const oragoCreateResponse = await oragoClient.createPfAnalysis({
+          cpf: input.cpf,
+          email: input.email,
+          phone: input.phone,
+          selfie: input.selfie,
+          products: oragoProducts,
+        });
 
-      await prisma.oragoConsultLock.update({
-        where: {
-          id: lock.id,
-        },
-        data: {
-          oragoAnalysisId: oragoCreateResponse.analysis_id,
-        },
-      });
+        await prisma.oragoConsultLock.update({
+          where: {
+            id: lock.id,
+          },
+          data: {
+            oragoAnalysisId: oragoCreateResponse.analysis_id,
+          },
+        });
 
-      const collectResponse = await tryCollectOragoWithRetry(
-        oragoCreateResponse.analysis_id,
-        { attempts: 1, delayMs: 0 },
-      );
+        const collectResponse = await tryCollectOragoWithRetry(
+          oragoCreateResponse.analysis_id,
+          { attempts: 1, delayMs: 0 },
+        );
 
-      if (!collectResponse) {
-        return {
-          pending: true,
-          status: "PROCESSING",
-          consultLockId: lock.id,
-          document: input.cpf,
+        if (!collectResponse) {
+          return {
+            pending: true,
+            status: "PROCESSING",
+            consultLockId: lock.id,
+            document: input.cpf,
+            documentType: "CPF",
+            message:
+              "A consulta foi criada na Órago e ainda está em processamento. Consulte o status em alguns instantes.",
+          };
+        }
+
+        return this.finalizeOragoConsult({
+          lockId: lock.id,
+          requesterId: input.requesterId,
           documentType: "CPF",
-          message:
-            "A consulta foi criada na Órago e ainda está em processamento. Consulte o status em alguns instantes.",
-        };
-      }
+          document: input.cpf,
+          oragoAnalysisId: oragoCreateResponse.analysis_id,
+          collectResponse,
+          rentValue: input.rentValue,
+          condominiumValue: input.condominiumValue,
+          feesValue: input.feesValue,
+          email: input.email,
+          phone: input.phone,
+        });
+      } else {
+        // Fluxo com 2 CPFs (Composição de Renda)
+        const [orago1, orago2] = await Promise.all([
+          oragoClient.createPfAnalysis({
+            cpf: input.cpf,
+            email: input.email,
+            phone: input.phone,
+            selfie: input.selfie,
+            products: oragoProducts,
+          }),
+          oragoClient.createPfAnalysis({
+            cpf: input.secondCpf!,
+            products: oragoProducts,
+          }),
+        ]);
 
-      return this.finalizeOragoConsult({
-        lockId: lock.id,
-        requesterId: input.requesterId,
-        documentType: "CPF",
-        document: input.cpf,
-        oragoAnalysisId: oragoCreateResponse.analysis_id,
-        collectResponse,
-        rentValue: input.rentValue,
-        condominiumValue: input.condominiumValue,
-        feesValue: input.feesValue,
-      });
+        await prisma.oragoConsultLock.update({
+          where: {
+            id: lock.id,
+          },
+          data: {
+            oragoAnalysisId: orago1.analysis_id,
+            secondOragoAnalysisId: orago2.analysis_id,
+          },
+        });
+
+        const [collect1, collect2] = await Promise.all([
+          tryCollectOragoWithRetry(orago1.analysis_id, {
+            attempts: 1,
+            delayMs: 0,
+          }),
+          tryCollectOragoWithRetry(orago2.analysis_id, {
+            attempts: 1,
+            delayMs: 0,
+          }),
+        ]);
+
+        if (!collect1 || !collect2) {
+          return {
+            pending: true,
+            status: "PROCESSING",
+            consultLockId: lock.id,
+            document: input.cpf,
+            documentType: "CPF",
+            message:
+              "As análises foram criadas na Órago e ainda estão em processamento. Consulte o status em alguns instantes.",
+          };
+        }
+
+        return this.finalizeJointOragoConsult({
+          lockId: lock.id,
+          requesterId: input.requesterId,
+          document: input.cpf,
+          secondDocument: input.secondCpf!,
+          oragoAnalysisId: orago1.analysis_id,
+          secondOragoAnalysisId: orago2.analysis_id,
+          collectResponse: collect1,
+          secondCollectResponse: collect2,
+          rentValue: input.rentValue,
+          condominiumValue: input.condominiumValue,
+          feesValue: input.feesValue,
+          email: input.email,
+          phone: input.phone,
+        });
+      }
     } catch (error: any) {
       const currentLock = await prisma.oragoConsultLock.findUnique({
         where: {
@@ -765,6 +1197,91 @@ export class RentalApplicationService {
       );
     }
 
+    if (lock.secondOragoAnalysisId) {
+      let collect1: any = null;
+      let collect2: any = null;
+
+      try {
+        [collect1, collect2] = await Promise.all([
+          tryCollectOragoWithRetry(lock.oragoAnalysisId, {
+            attempts: 1,
+            delayMs: 0,
+          }),
+          tryCollectOragoWithRetry(lock.secondOragoAnalysisId, {
+            attempts: 1,
+            delayMs: 0,
+          }),
+        ]);
+      } catch (error) {
+        const message = getErrorMessage(error);
+
+        if (
+          error instanceof AppError &&
+          error.code === "ORAGO_COLLECT_RETURNED_ERROR"
+        ) {
+          await prisma.oragoConsultLock.update({
+            where: { id: lock.id },
+            data: { status: "FAILED", errorMessage: message },
+          });
+
+          return { status: "FAILED", message };
+        }
+
+        console.warn("[ORAGO_POLL_JOINT_TEMPORARY_ERROR]", {
+          analysisId1: lock.oragoAnalysisId,
+          analysisId2: lock.secondOragoAnalysisId,
+          message,
+        });
+
+        return {
+          status: "PROCESSING",
+          consultLockId: lock.id,
+          message: "As análises ainda estão em processamento na Órago.",
+        };
+      }
+
+      if (!collect1 || !collect2) {
+        return {
+          status: "PROCESSING",
+          consultLockId: lock.id,
+          message: "As análises ainda estão em processamento na Órago.",
+        };
+      }
+
+      try {
+        const result = await this.finalizeJointOragoConsult({
+          lockId: lock.id,
+          requesterId: lock.requesterId,
+          document: lock.document,
+          secondDocument: lock.secondDocument ?? "",
+          oragoAnalysisId: lock.oragoAnalysisId,
+          secondOragoAnalysisId: lock.secondOragoAnalysisId,
+          collectResponse: collect1,
+          secondCollectResponse: collect2,
+          rentValue: Number(lock.rentValue),
+          condominiumValue: Number(lock.condominiumValue),
+          feesValue: Number(lock.feesValue),
+        });
+
+        return {
+          status: "COMPLETED",
+          ...result,
+        };
+      } catch (error) {
+        const message = getErrorMessage(error);
+
+        await prisma.oragoConsultLock.update({
+          where: { id: lock.id },
+          data: { status: "FAILED", errorMessage: message },
+        });
+
+        return {
+          status: "FAILED",
+          message,
+        };
+      }
+    }
+
     let collectResponse: any = null;
 
     try {
@@ -1012,6 +1529,12 @@ export class RentalApplicationService {
         },
       });
 
+      const existingTenants = await tx.rentalApplicationTenant.findMany({
+        where: {
+          applicationId: params.applicationId,
+        },
+      });
+
       await tx.rentalApplicationTenant.deleteMany({
         where: {
           applicationId: params.applicationId,
@@ -1019,14 +1542,29 @@ export class RentalApplicationService {
       });
 
       await tx.rentalApplicationTenant.createMany({
-        data: params.data.tenants.map((tenant, index) => ({
-          applicationId: params.applicationId,
-          order: index + 1,
-          name: tenant.name,
-          document: tenant.document.replace(/\D/g, ""),
-          email: tenant.email,
-          phone: tenant.phone.replace(/\D/g, ""),
-        })),
+        data: params.data.tenants.map((tenant, index) => {
+          const docDigits = tenant.document.replace(/\D/g, "");
+          const match = existingTenants.find(
+            (et) =>
+              et.document.replace(/\D/g, "") === docDigits ||
+              et.order === index + 1,
+          );
+          return {
+            applicationId: params.applicationId,
+            order: index + 1,
+            name: tenant.name,
+            document: docDigits,
+            email: tenant.email,
+            phone: tenant.phone.replace(/\D/g, ""),
+            oragoAnalysisId: match?.oragoAnalysisId ?? null,
+            oragoData: match?.oragoData ?? null,
+            presumedIncome: match?.presumedIncome ?? null,
+            incomePercentage: match?.incomePercentage ?? null,
+            isPrimaryIncome: match?.isPrimaryIncome ?? false,
+            recommendation: match?.recommendation ?? null,
+            decisionReasons: match?.decisionReasons ?? null,
+          };
+        }),
       });
 
       await tx.contract.upsert({

@@ -33,7 +33,7 @@ O Doculoc API é o backend responsável por:
 - Perfis `ADMIN` e `REAL_ESTATE`.
 - Cadastro de perfil da imobiliária.
 - Recuperação de senha via e-mail.
-- Consulta cadastral de CPF/CNPJ via Órago.
+- Consulta cadastral de CPF/CNPJ via Órago (com suporte a consulta conjunta de 2 CPFs para Composição de Renda).
 - Pré-análise automática de risco para locação.
 - Controle de créditos de consulta.
 - Usuários VIP com consultas ilimitadas.

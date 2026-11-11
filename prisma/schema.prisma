@@ -242,9 +242,11 @@ model OragoConsultLock {
   id              String             @id @default(uuid())
   documentType    DocumentType
   document        String             @unique
+  secondDocument  String?
   requesterId     String
   requester       User               @relation(fields: [requesterId], references: [id], onDelete: Cascade)
   oragoAnalysisId String?            @unique
+  secondOragoAnalysisId String?
   status          OragoConsultStatus @default(PROCESSING)
   errorMessage    String?
 
@@ -316,6 +318,9 @@ model RentalApplication {
   contract Contract?
   tenants  RentalApplicationTenant[]
 
+  isJointApplication  Boolean  @default(false)
+  totalPresumedIncome Decimal?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -337,6 +342,14 @@ model RentalApplicationTenant {
   document String
   email    String
   phone    String
+
+  oragoAnalysisId  String?
+  oragoData        String?
+  presumedIncome   Decimal?
+  incomePercentage Decimal?
+  isPrimaryIncome  Boolean?              @default(false)
+  recommendation   RecommendationStatus?
+  decisionReasons  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
