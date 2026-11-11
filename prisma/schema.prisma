@@ -243,10 +243,12 @@ model OragoConsultLock {
   documentType    DocumentType
   document        String             @unique
   secondDocument  String?
+  additionalDocuments String?
   requesterId     String
   requester       User               @relation(fields: [requesterId], references: [id], onDelete: Cascade)
   oragoAnalysisId String?            @unique
   secondOragoAnalysisId String?
+  additionalOragoAnalysisIds String?
   status          OragoConsultStatus @default(PROCESSING)
   errorMessage    String?
 

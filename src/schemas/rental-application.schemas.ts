@@ -66,6 +66,7 @@ export const createRentalApplicationByCpfSchema = z
   .object({
     cpf: cpfSchema,
     secondCpf: cpfSchema.optional().nullable(),
+    additionalCpfs: z.array(cpfSchema).max(4).optional().nullable(),
     email: z.string().email().optional(),
     phone: z.string().optional(),
     selfie: z.string().optional(),
@@ -76,16 +77,33 @@ export const createRentalApplicationByCpfSchema = z
   })
   .refine(
     (data) => {
-      if (data.secondCpf) {
-        const cpf1 = data.cpf.replace(/\D/g, "");
-        const cpf2 = data.secondCpf.replace(/\D/g, "");
-        return cpf1 !== cpf2;
+      const mainCpf = data.cpf.replace(/\D/g, "");
+      const extraList: string[] = [];
+
+      if (data.additionalCpfs && data.additionalCpfs.length > 0) {
+        extraList.push(...data.additionalCpfs.map((c) => c.replace(/\D/g, "")));
+      } else if (data.secondCpf) {
+        extraList.push(data.secondCpf.replace(/\D/g, ""));
       }
+
+      if (extraList.length === 0) return true;
+
+      // Check if mainCpf is inside extraList
+      if (extraList.includes(mainCpf)) {
+        return false;
+      }
+
+      // Check if extraList has duplicates
+      const uniqueExtras = new Set(extraList);
+      if (uniqueExtras.size !== extraList.length) {
+        return false;
+      }
+
       return true;
     },
     {
-      message: "O segundo CPF não pode ser igual ao primeiro.",
-      path: ["secondCpf"],
+      message: "Os CPFs informados para a consulta não podem ser repetidos.",
+      path: ["additionalCpfs"],
     },
   );
 
