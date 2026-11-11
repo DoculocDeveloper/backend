@@ -333,10 +333,11 @@ export class RentalApplicationController {
     ]);
 
     const isAdmin = request.user!.role === UserRole.ADMIN;
+    const isSeller = request.user!.role === UserRole.SELLER;
 
     return response.json({
       applications: applications.map((application) => {
-        const unreadCount = (application as any)._count?.messages ?? 0;
+        const unreadCount = isSeller ? 0 : ((application as any)._count?.messages ?? 0);
         return {
           ...application,
           oragoData: isAdmin ? application.oragoData : undefined,
@@ -526,6 +527,9 @@ export class RentalApplicationController {
       oragoData: isAdmin ? parseJsonSafe((tenant as any).oragoData) : undefined,
     }));
 
+    const isSeller = request.user!.role === UserRole.SELLER;
+    const unreadCount = isSeller ? 0 : ((application as any)._count?.messages ?? 0);
+
     return response.json({
       application: {
         ...application,
@@ -536,8 +540,8 @@ export class RentalApplicationController {
         decisionMetadata: application.decisionMetadata
           ? JSON.parse(application.decisionMetadata)
           : null,
-        unreadMessagesCount: (application as any)._count?.messages ?? 0,
-        hasUnreadMessages: ((application as any)._count?.messages ?? 0) > 0,
+        unreadMessagesCount: unreadCount,
+        hasUnreadMessages: unreadCount > 0,
         oragoRawResponse: undefined,
         oragoData: isAdmin ? parsedOragoData : undefined,
       },

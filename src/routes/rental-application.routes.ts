@@ -112,14 +112,13 @@ rentalApplicationRoutes.post(
   asyncHandler(rentalApplicationController.reopen),
 );
 
-// Rotas de Mensagens e Anexos (Chat)
+// Rotas de Mensagens e Anexos (Chat) - exclusivo Admin e Imobiliária
 rentalApplicationRoutes.get(
   "/:id/messages",
   authorize(
     UserRole.ADMIN,
     UserRole.REAL_ESTATE,
     UserRole.ACCOUNT_EXECUTIVE,
-    UserRole.SELLER,
   ),
   asyncHandler(messageController.list),
 );
@@ -130,7 +129,6 @@ rentalApplicationRoutes.post(
     UserRole.ADMIN,
     UserRole.REAL_ESTATE,
     UserRole.ACCOUNT_EXECUTIVE,
-    UserRole.SELLER,
   ),
   upload.single("file"),
   asyncHandler(messageController.create),
@@ -142,7 +140,6 @@ rentalApplicationRoutes.get(
     UserRole.ADMIN,
     UserRole.REAL_ESTATE,
     UserRole.ACCOUNT_EXECUTIVE,
-    UserRole.SELLER,
   ),
   asyncHandler(messageController.download),
 );

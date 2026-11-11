@@ -31,6 +31,10 @@ export class RentalApplicationMessageService {
       throw new AppError(404, "Consulta não encontrada");
     }
 
+    if (params.userRole === UserRole.SELLER) {
+      throw new AppError(403, "Vendedores não possuem permissão de acesso ao chat da consulta");
+    }
+
     if (
       params.userRole === UserRole.ADMIN ||
       params.userRole === UserRole.ACCOUNT_EXECUTIVE
@@ -40,21 +44,6 @@ export class RentalApplicationMessageService {
 
     if (application.requesterId === params.userId) {
       return application;
-    }
-
-    if (params.userRole === UserRole.SELLER) {
-      const associations = await prisma.realEstateSeller.findMany({
-        where: { sellerId: params.userId },
-        select: { realEstateId: true },
-      });
-      const allowedIds = associations.map((a) => a.realEstateId);
-      if (params.userRealEstateId && !allowedIds.includes(params.userRealEstateId)) {
-        allowedIds.push(params.userRealEstateId);
-      }
-
-      if (allowedIds.includes(application.requesterId)) {
-        return application;
-      }
     }
 
     throw new AppError(403, "Acesso negado a esta consulta");
