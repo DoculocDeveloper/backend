@@ -9,3 +9,4 @@ export const getReportsSummaryQuerySchema = z.object({
 export type GetReportsSummaryQuery = z.infer<
   typeof getReportsSummaryQuerySchema
 >;
+

@@ -13,3 +13,4 @@ export class ReportController {
     return response.json(result);
   };
 }
+
