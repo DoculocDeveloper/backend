@@ -14,3 +14,4 @@ ON CONFLICT ("email") DO UPDATE SET
     "passwordHash" = '$2a$10$y6nyMiRYNRbiQgKuUzcbOuI4l8PoGeG/2ksz7kS7XSEdnA6FuzwJ.',
     "role" = 'ADMIN'::"UserRole",
     "updatedAt" = CURRENT_TIMESTAMP;
+
