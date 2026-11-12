@@ -187,17 +187,15 @@ export class RentalApplicationMessageService {
 
     if (currentApplication) {
       if (isStaff) {
-        // Se administrador/staff mandou mensagem e a consulta não estiver em status final
-        const terminalStatuses = [
+        // Se administrador/staff mandou mensagem e a consulta não estiver cancelada ou declinada
+        const nonTransitionStatuses = [
           "CONTRACT_DECLINED",
           "CANCELLED",
-          "ADMIN_REJECTED",
-          "CONTRACT_GENERATED",
         ];
 
         if (
           currentApplication.status !== "WAITING_REAL_ESTATE_RETURN" &&
-          !terminalStatuses.includes(currentApplication.status)
+          !nonTransitionStatuses.includes(currentApplication.status)
         ) {
           await prisma.rentalApplication.update({
             where: { id: params.applicationId },
