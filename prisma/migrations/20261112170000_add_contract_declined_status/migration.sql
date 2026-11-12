@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "RentalApplicationStatus" ADD VALUE IF NOT EXISTS 'CONTRACT_DECLINED';

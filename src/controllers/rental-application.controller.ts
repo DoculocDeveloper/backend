@@ -14,6 +14,7 @@ import {
   contestRentalApplicationSchema,
   createRentalApplicationByCnpjSchema,
   createRentalApplicationByCpfSchema,
+  declineRentalApplicationSchema,
   updateRentalValuesSchema,
   fillContractDataSchema,
   listRentalApplicationsSchema,
@@ -603,6 +604,19 @@ export class RentalApplicationController {
       applicationId: params.id,
       adminId: request.user!.id,
       decision: body.decision,
+      reason: body.reason,
+    });
+
+    return response.json({ application });
+  }
+
+  async decline(request: Request, response: Response) {
+    const params = rentalApplicationParamsSchema.parse(request.params);
+    const body = declineRentalApplicationSchema.parse(request.body);
+
+    const application = await rentalApplicationService.declineApplication({
+      applicationId: params.id,
+      adminId: request.user!.id,
       reason: body.reason,
     });
 

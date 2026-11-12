@@ -41,6 +41,7 @@ O Doculoc API é o backend responsável por:
 - Bloqueio contra consulta duplicada do mesmo CPF/CNPJ.
 - Contestação de consultas reprovadas.
 - Aprovação/reprovação manual pelo administrador.
+- Declínio de contrato pelo locatário via administrador (status `CONTRACT_DECLINED`), com cancelamento automático de envelope Clicksign pendente e bloqueio para contratos já assinados.
 - Preenchimento de dados de locatário e imóvel.
 - Geração de contrato `.docx` via template.
 - Download de contratos armazenados localmente ou em Cloudflare R2/S3-compatible storage.

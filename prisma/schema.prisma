@@ -45,6 +45,7 @@ enum RentalApplicationStatus {
   CONTESTED
   ADMIN_REJECTED
   CANCELLED
+  CONTRACT_DECLINED
 }
 
 enum AdminDecision {

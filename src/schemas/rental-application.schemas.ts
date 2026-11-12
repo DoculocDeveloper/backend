@@ -60,7 +60,12 @@ export const rentalApplicationStatusSchema = z.enum([
   "CONTESTED",
   "ADMIN_REJECTED",
   "CANCELLED",
+  "CONTRACT_DECLINED",
 ]);
+
+export const declineRentalApplicationSchema = z.object({
+  reason: z.string().optional(),
+});
 
 export const createRentalApplicationByCpfSchema = z
   .object({

@@ -112,6 +112,12 @@ rentalApplicationRoutes.post(
   asyncHandler(rentalApplicationController.reopen),
 );
 
+rentalApplicationRoutes.post(
+  "/:id/decline",
+  authorize(UserRole.ADMIN),
+  asyncHandler(rentalApplicationController.decline),
+);
+
 // Rotas de Mensagens e Anexos (Chat) - exclusivo Admin e Imobiliária
 rentalApplicationRoutes.get(
   "/:id/messages",

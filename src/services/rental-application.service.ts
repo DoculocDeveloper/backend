@@ -1918,6 +1918,79 @@ export class RentalApplicationService {
     return { count };
   }
 
+  async declineApplication(params: {
+    applicationId: string;
+    adminId: string;
+    reason?: string;
+  }) {
+    const application = await prisma.rentalApplication.findUnique({
+      where: { id: params.applicationId },
+      include: {
+        contract: true,
+      },
+    });
+
+    if (!application) {
+      throw new AppError(404, "Consulta não encontrada");
+    }
+
+    if (application.contract?.signatureStatus === "SIGNED") {
+      throw new AppError(
+        400,
+        "Não é possível declinar uma consulta cujo contrato já foi assinado.",
+        "CONTRACT_ALREADY_SIGNED",
+      );
+    }
+
+    if (
+      application.contract?.clicksignEnvelopeId &&
+      application.contract?.clicksignDocumentId &&
+      ["SENT", "PARTIALLY_SIGNED", "ENVELOPE_CREATED", "ACTION_REQUIRED"].includes(
+        application.contract.signatureStatus ?? "",
+      )
+    ) {
+      try {
+        await clicksignClient.cancelDocument({
+          envelopeId: application.contract.clicksignEnvelopeId,
+          documentId: application.contract.clicksignDocumentId,
+        });
+      } catch (error) {
+        console.error("[CLICKSIGN_CANCEL_DOCUMENT_ON_DECLINE_ERROR]", error);
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (application.contract) {
+        await tx.contract.update({
+          where: { id: application.contract.id },
+          data: {
+            signatureStatus: "REFUSED",
+          },
+        });
+      }
+
+      await tx.rentalApplication.update({
+        where: { id: application.id },
+        data: {
+          status: "CONTRACT_DECLINED",
+          adminDecisionReason: params.reason
+            ? `Declinado pelo locatário: ${params.reason}`
+            : "Declinado pelo locatário",
+          adminDecisionById: params.adminId,
+          adminDecisionAt: new Date(),
+        },
+      });
+    });
+
+    return prisma.rentalApplication.findUnique({
+      where: { id: params.applicationId },
+      include: {
+        contract: true,
+        tenants: true,
+      },
+    });
+  }
+
   async markAsViewed(params: { applicationId: string }) {
     const application = await prisma.rentalApplication.findUnique({
       where: { id: params.applicationId },
