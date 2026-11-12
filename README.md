@@ -1147,18 +1147,35 @@ GET /reports/summary?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&requesterId=UUID
     "startDate": "2026-01-01",
     "endDate": "2026-12-31"
   },
+  "doculocGlobal": {
+    "totalApplications": 120,
+    "totalGeneratedContracts": {
+      "count": 45,
+      "totalValue": 135000.00
+    },
+    "totalSignedContracts": {
+      "count": 30,
+      "totalValue": 90000.00
+    }
+  },
   "totals": {
     "totalApplications": 42,
     "generatedContracts": {
       "count": 15,
       "totalValue": 45000.00
     },
+    "signedContracts": {
+      "count": 10,
+      "totalValue": 30000.00
+    },
     "declinedContracts": {
       "count": 3,
       "totalValue": 9000.00
     },
     "averageTicket": 3000.00,
-    "conversionRate": 35.7
+    "conversionRate": 35.7,
+    "signedConversionRate": 66.7,
+    "signedSharePercentage": 33.3
   },
   "realEstates": [
     {
@@ -1171,12 +1188,19 @@ GET /reports/summary?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&requesterId=UUID
         "count": 8,
         "totalValue": 24000.00
       },
+      "signedContracts": {
+        "count": 5,
+        "totalValue": 15000.00
+      },
       "declinedContracts": {
         "count": 1,
         "totalValue": 3000.00
       },
       "averageTicket": 3000.00,
-      "conversionRate": 40.0
+      "conversionRate": 40.0,
+      "signedConversionRate": 62.5,
+      "signedSharePercentage": 16.7,
+      "signedValueSharePercentage": 16.7
     }
   ]
 }

@@ -25,12 +25,19 @@ export interface RealEstateReportItem {
     count: number;
     totalValue: number;
   };
+  signedContracts: {
+    count: number;
+    totalValue: number;
+  };
   declinedContracts: {
     count: number;
     totalValue: number;
   };
   averageTicket: number;
-  conversionRate: number;
+  conversionRate: number; // gerados / consultas (%)
+  signedConversionRate: number; // assinados / gerados (%)
+  signedSharePercentage: number; // % do total de contratos assinados da Doculoc
+  signedValueSharePercentage: number; // % do valor total de contratos assinados da Doculoc
 }
 
 export interface ReportsSummaryResult {
@@ -38,9 +45,24 @@ export interface ReportsSummaryResult {
     startDate?: string;
     endDate?: string;
   };
+  doculocGlobal: {
+    totalApplications: number;
+    totalGeneratedContracts: {
+      count: number;
+      totalValue: number;
+    };
+    totalSignedContracts: {
+      count: number;
+      totalValue: number;
+    };
+  };
   totals: {
     totalApplications: number;
     generatedContracts: {
+      count: number;
+      totalValue: number;
+    };
+    signedContracts: {
       count: number;
       totalValue: number;
     };
@@ -50,6 +72,8 @@ export interface ReportsSummaryResult {
     };
     averageTicket: number;
     conversionRate: number;
+    signedConversionRate: number;
+    signedSharePercentage: number;
   };
   realEstates: RealEstateReportItem[];
 }
@@ -65,16 +89,14 @@ export class ReportService {
     if (gte) createdAtFilter.gte = gte;
     if (lte) createdAtFilter.lte = lte;
 
-    const where: Prisma.RentalApplicationWhereInput = {
-      ...(requesterId ? { requesterId } : {}),
-      ...(Object.keys(createdAtFilter).length > 0
+    const periodWhere: Prisma.RentalApplicationWhereInput =
+      Object.keys(createdAtFilter).length > 0
         ? { createdAt: createdAtFilter }
-        : {}),
-    };
+        : {};
 
-    // 1. Obter aplicações no período
-    const applications = await prisma.rentalApplication.findMany({
-      where,
+    // 1. Obter todas as aplicações da Doculoc no período (para métricas globais e cálculo de share)
+    const allApplications = await prisma.rentalApplication.findMany({
+      where: periodWhere,
       select: {
         id: true,
         status: true,
@@ -82,6 +104,14 @@ export class ReportService {
         requestedExpense: true,
         requesterId: true,
         createdAt: true,
+        contract: {
+          select: {
+            id: true,
+            status: true,
+            signatureStatus: true,
+            signedAt: true,
+          },
+        },
         requester: {
           select: {
             id: true,
@@ -100,11 +130,10 @@ export class ReportService {
       },
     });
 
-    // 2. Obter imobiliárias correspondentes (ou todas caso não passe requesterId)
+    // 2. Obter todas as imobiliárias
     const realEstatesUsers = await prisma.user.findMany({
       where: {
         role: UserRole.REAL_ESTATE,
-        ...(requesterId ? { id: requesterId } : {}),
       },
       select: {
         id: true,
@@ -122,7 +151,7 @@ export class ReportService {
       orderBy: { name: "asc" },
     });
 
-    // Mapa para agregar dados por imobiliária
+    // Mapa para agregação por imobiliária
     const realEstateMap = new Map<
       string,
       {
@@ -133,12 +162,13 @@ export class ReportService {
         totalApplications: number;
         generatedCount: number;
         generatedValue: number;
+        signedCount: number;
+        signedValue: number;
         declinedCount: number;
         declinedValue: number;
       }
     >();
 
-    // Inicializa com as imobiliárias cadastradas
     for (const re of realEstatesUsers) {
       realEstateMap.set(re.id, {
         id: re.id,
@@ -149,19 +179,23 @@ export class ReportService {
         totalApplications: 0,
         generatedCount: 0,
         generatedValue: 0,
+        signedCount: 0,
+        signedValue: 0,
         declinedCount: 0,
         declinedValue: 0,
       });
     }
 
-    let totalApplications = 0;
-    let totalGeneratedCount = 0;
-    let totalGeneratedValue = 0;
-    let totalDeclinedCount = 0;
-    let totalDeclinedValue = 0;
+    let globalTotalApplications = 0;
+    let globalGeneratedCount = 0;
+    let globalGeneratedValue = 0;
+    let globalSignedCount = 0;
+    let globalSignedValue = 0;
+    let globalDeclinedCount = 0;
+    let globalDeclinedValue = 0;
 
-    for (const app of applications) {
-      totalApplications += 1;
+    for (const app of allApplications) {
+      globalTotalApplications += 1;
       const val = Number(app.rentValue ?? app.requestedExpense ?? 0);
 
       let item = realEstateMap.get(app.requesterId);
@@ -180,6 +214,8 @@ export class ReportService {
           totalApplications: 0,
           generatedCount: 0,
           generatedValue: 0,
+          signedCount: 0,
+          signedValue: 0,
           declinedCount: 0,
           declinedValue: 0,
         };
@@ -188,91 +224,171 @@ export class ReportService {
 
       item.totalApplications += 1;
 
-      if (app.status === "CONTRACT_GENERATED") {
-        totalGeneratedCount += 1;
-        totalGeneratedValue += val;
+      const isGenerated = app.status === "CONTRACT_GENERATED";
+      const isSigned =
+        isGenerated &&
+        (app.contract?.signatureStatus === "SIGNED" ||
+          app.contract?.signedAt !== null && app.contract?.signedAt !== undefined);
+
+      if (isGenerated) {
+        globalGeneratedCount += 1;
+        globalGeneratedValue += val;
         item.generatedCount += 1;
         item.generatedValue += val;
-      } else if (app.status === "CONTRACT_DECLINED") {
-        totalDeclinedCount += 1;
-        totalDeclinedValue += val;
+      }
+
+      if (isSigned) {
+        globalSignedCount += 1;
+        globalSignedValue += val;
+        item.signedCount += 1;
+        item.signedValue += val;
+      }
+
+      if (app.status === "CONTRACT_DECLINED") {
+        globalDeclinedCount += 1;
+        globalDeclinedValue += val;
         item.declinedCount += 1;
         item.declinedValue += val;
       }
     }
 
-    const realEstatesResult: RealEstateReportItem[] = Array.from(
+    // Gerar lista de imobiliárias com percentual de representatividade do total Doculoc
+    const allRealEstatesResult: RealEstateReportItem[] = Array.from(
       realEstateMap.values()
-    )
-      .map((item) => {
-        const averageTicket =
-          item.generatedCount > 0
-            ? Number((item.generatedValue / item.generatedCount).toFixed(2))
-            : 0;
-        const conversionRate =
-          item.totalApplications > 0
-            ? Number(
-                ((item.generatedCount / item.totalApplications) * 100).toFixed(
-                  1
-                )
-              )
-            : 0;
+    ).map((item) => {
+      const averageTicket =
+        item.generatedCount > 0
+          ? Number((item.generatedValue / item.generatedCount).toFixed(2))
+          : 0;
 
-        return {
-          id: item.id,
-          name: item.name,
-          email: item.email,
-          document: item.document,
-          totalApplications: item.totalApplications,
-          generatedContracts: {
-            count: item.generatedCount,
-            totalValue: Number(item.generatedValue.toFixed(2)),
-          },
-          declinedContracts: {
-            count: item.declinedCount,
-            totalValue: Number(item.declinedValue.toFixed(2)),
-          },
-          averageTicket,
-          conversionRate,
-        };
-      })
-      // Se não filtrou por uma específica, mostrar primeiro as que tiveram mais movimentação
-      .sort((a, b) => {
-        if (b.totalApplications !== a.totalApplications) {
+      const conversionRate =
+        item.totalApplications > 0
+          ? Number(((item.generatedCount / item.totalApplications) * 100).toFixed(1))
+          : 0;
+
+      const signedConversionRate =
+        item.generatedCount > 0
+          ? Number(((item.signedCount / item.generatedCount) * 100).toFixed(1))
+          : 0;
+
+      // Representatividade sobre o total de contratos assinados da Doculoc (ex: 10 de 500 = 2.0%)
+      const signedSharePercentage =
+        globalSignedCount > 0
+          ? Number(((item.signedCount / globalSignedCount) * 100).toFixed(1))
+          : 0;
+
+      const signedValueSharePercentage =
+        globalSignedValue > 0
+          ? Number(((item.signedValue / globalSignedValue) * 100).toFixed(1))
+          : 0;
+
+      return {
+        id: item.id,
+        name: item.name,
+        email: item.email,
+        document: item.document,
+        totalApplications: item.totalApplications,
+        generatedContracts: {
+          count: item.generatedCount,
+          totalValue: Number(item.generatedValue.toFixed(2)),
+        },
+        signedContracts: {
+          count: item.signedCount,
+          totalValue: Number(item.signedValue.toFixed(2)),
+        },
+        declinedContracts: {
+          count: item.declinedCount,
+          totalValue: Number(item.declinedValue.toFixed(2)),
+        },
+        averageTicket,
+        conversionRate,
+        signedConversionRate,
+        signedSharePercentage,
+        signedValueSharePercentage,
+      };
+    });
+
+    // Se filtrou por uma imobiliária específica, filtra a lista para ela
+    const filteredRealEstates = requesterId
+      ? allRealEstatesResult.filter((re) => re.id === requesterId)
+      : allRealEstatesResult.sort((a, b) => {
+          // Ordena primeiro por contratos assinados (receita fechada), depois por total de consultas
+          if (b.signedContracts.count !== a.signedContracts.count) {
+            return b.signedContracts.count - a.signedContracts.count;
+          }
+          if (b.generatedContracts.count !== a.generatedContracts.count) {
+            return b.generatedContracts.count - a.generatedContracts.count;
+          }
           return b.totalApplications - a.totalApplications;
-        }
-        return b.generatedContracts.totalValue - a.generatedContracts.totalValue;
-      });
+        });
 
-    const averageTicket =
-      totalGeneratedCount > 0
-        ? Number((totalGeneratedValue / totalGeneratedCount).toFixed(2))
-        : 0;
-    const conversionRate =
-      totalApplications > 0
-        ? Number(((totalGeneratedCount / totalApplications) * 100).toFixed(1))
-        : 0;
+    // Totais calculados para a resposta (se selecionou uma imobiliária, totais dela; senão, global)
+    let totals;
+    if (requesterId && filteredRealEstates.length > 0) {
+      const selected = filteredRealEstates[0];
+      totals = {
+        totalApplications: selected.totalApplications,
+        generatedContracts: selected.generatedContracts,
+        signedContracts: selected.signedContracts,
+        declinedContracts: selected.declinedContracts,
+        averageTicket: selected.averageTicket,
+        conversionRate: selected.conversionRate,
+        signedConversionRate: selected.signedConversionRate,
+        signedSharePercentage: selected.signedSharePercentage,
+      };
+    } else {
+      const globalAverageTicket =
+        globalGeneratedCount > 0
+          ? Number((globalGeneratedValue / globalGeneratedCount).toFixed(2))
+          : 0;
+      const globalConversionRate =
+        globalTotalApplications > 0
+          ? Number(((globalGeneratedCount / globalTotalApplications) * 100).toFixed(1))
+          : 0;
+      const globalSignedConversionRate =
+        globalGeneratedCount > 0
+          ? Number(((globalSignedCount / globalGeneratedCount) * 100).toFixed(1))
+          : 0;
+
+      totals = {
+        totalApplications: globalTotalApplications,
+        generatedContracts: {
+          count: globalGeneratedCount,
+          totalValue: Number(globalGeneratedValue.toFixed(2)),
+        },
+        signedContracts: {
+          count: globalSignedCount,
+          totalValue: Number(globalSignedValue.toFixed(2)),
+        },
+        declinedContracts: {
+          count: globalDeclinedCount,
+          totalValue: Number(globalDeclinedValue.toFixed(2)),
+        },
+        averageTicket: globalAverageTicket,
+        conversionRate: globalConversionRate,
+        signedConversionRate: globalSignedConversionRate,
+        signedSharePercentage: 100,
+      };
+    }
 
     return {
       period: {
         startDate,
         endDate,
       },
-      totals: {
-        totalApplications,
-        generatedContracts: {
-          count: totalGeneratedCount,
-          totalValue: Number(totalGeneratedValue.toFixed(2)),
+      doculocGlobal: {
+        totalApplications: globalTotalApplications,
+        totalGeneratedContracts: {
+          count: globalGeneratedCount,
+          totalValue: Number(globalGeneratedValue.toFixed(2)),
         },
-        declinedContracts: {
-          count: totalDeclinedCount,
-          totalValue: Number(totalDeclinedValue.toFixed(2)),
+        totalSignedContracts: {
+          count: globalSignedCount,
+          totalValue: Number(globalSignedValue.toFixed(2)),
         },
-        averageTicket,
-        conversionRate,
       },
-      realEstates: realEstatesResult,
+      totals,
+      realEstates: filteredRealEstates,
     };
   }
 }
-
