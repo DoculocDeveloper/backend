@@ -1125,6 +1125,65 @@ GET /system/available-products
 
 ---
 
+# Relatórios (Reports)
+
+Rotas protegidas exclusivas para o perfil `ADMIN`.
+
+## Obter resumo operacional e por imobiliária
+
+```http
+GET /reports/summary?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&requesterId=UUID
+```
+
+**Query params opcionais:**
+- `startDate`: data inicial (formato `YYYY-MM-DD` ou ISO).
+- `endDate`: data final (formato `YYYY-MM-DD` ou ISO).
+- `requesterId`: UUID da imobiliária para filtrar apenas uma (se omitido, agrega todas).
+
+**Resposta de sucesso (200):**
+```json
+{
+  "period": {
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31"
+  },
+  "totals": {
+    "totalApplications": 42,
+    "generatedContracts": {
+      "count": 15,
+      "totalValue": 45000.00
+    },
+    "declinedContracts": {
+      "count": 3,
+      "totalValue": 9000.00
+    },
+    "averageTicket": 3000.00,
+    "conversionRate": 35.7
+  },
+  "realEstates": [
+    {
+      "id": "uuid-da-imobiliaria",
+      "name": "Imobiliária Alpha",
+      "email": "contato@alpha.com.br",
+      "document": "12.345.678/0001-90",
+      "totalApplications": 20,
+      "generatedContracts": {
+        "count": 8,
+        "totalValue": 24000.00
+      },
+      "declinedContracts": {
+        "count": 1,
+        "totalValue": 3000.00
+      },
+      "averageTicket": 3000.00,
+      "conversionRate": 40.0
+    }
+  ]
+}
+```
+
+---
+
 ## Deploy no Render
 
 ### Backend Web Service

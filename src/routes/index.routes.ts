@@ -7,6 +7,7 @@ import { webhookRoutes } from "./webhook.routes.js";
 import { creditRoutes } from "./credit.routes.js";
 import { systemRoutes } from "./system.routes.js";
 import { authRoutes } from "./auth.routes.js";
+import { reportRoutes } from "./report.routes.js";
 
 const routes = Router();
 
@@ -17,5 +18,6 @@ routes.use("/real-estates", realEstateRoutes);
 routes.use("/rental-applications", rentalApplicationRoutes);
 routes.use("/contracts", contractRoutes);
 routes.use("/webhooks", webhookRoutes);
+routes.use("/reports", reportRoutes);
 
 export { routes };
