@@ -61,6 +61,7 @@ export const rentalApplicationStatusSchema = z.enum([
   "ADMIN_REJECTED",
   "CANCELLED",
   "CONTRACT_DECLINED",
+  "WAITING_REAL_ESTATE_RETURN",
 ]);
 
 export const declineRentalApplicationSchema = z.object({

@@ -1521,7 +1521,10 @@ export class RentalApplicationService {
 
     const canFillContractData =
       application.status === "WAITING_CONTRACT_DATA" ||
-      application.status === "WAITING_ADMIN_CONTRACT";
+      application.status === "WAITING_ADMIN_CONTRACT" ||
+      (application.status === "WAITING_REAL_ESTATE_RETURN" &&
+        (application.previousStatus === "WAITING_CONTRACT_DATA" ||
+          application.previousStatus === "WAITING_ADMIN_CONTRACT"));
 
     if (!canFillContractData) {
       throw new AppError(
@@ -1583,6 +1586,7 @@ export class RentalApplicationService {
           requestedExpense,
 
           status: "WAITING_ADMIN_CONTRACT",
+          previousStatus: null,
         },
       });
 

@@ -35,6 +35,7 @@ O Doculoc API é o backend responsável por:
 - Recuperação de senha via e-mail.
 - Consulta cadastral de CPF/CNPJ via Órago (com suporte a consulta conjunta com múltiplos CPFs para Composição de Renda).
 - Chat por consulta com suporte a mensagens e anexos (PDF, imagens, DOCX até 15MB) entre imobiliária e administrador.
+- Transição automática de status via chat: quando o administrador envia mensagem no chat, a consulta muda para `WAITING_REAL_ESTATE_RETURN` ("Aguardando Retorno Imobiliária"), guardando o `previousStatus`; quando a imobiliária responde no chat, o status volta automaticamente ao anterior.
 - Pré-análise automática de risco para locação.
 - Controle de créditos de consulta.
 - Usuários VIP com consultas ilimitadas.

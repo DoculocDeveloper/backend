@@ -175,6 +175,55 @@ export class RentalApplicationMessageService {
       },
     });
 
+    // Atualização de status da consulta com base na interação no chat:
+    const currentApplication = await prisma.rentalApplication.findUnique({
+      where: { id: params.applicationId },
+      select: {
+        id: true,
+        status: true,
+        previousStatus: true,
+      },
+    });
+
+    if (currentApplication) {
+      if (isStaff) {
+        // Se administrador/staff mandou mensagem e a consulta não estiver em status final
+        const terminalStatuses = [
+          "CONTRACT_DECLINED",
+          "CANCELLED",
+          "ADMIN_REJECTED",
+          "CONTRACT_GENERATED",
+        ];
+
+        if (
+          currentApplication.status !== "WAITING_REAL_ESTATE_RETURN" &&
+          !terminalStatuses.includes(currentApplication.status)
+        ) {
+          await prisma.rentalApplication.update({
+            where: { id: params.applicationId },
+            data: {
+              status: "WAITING_REAL_ESTATE_RETURN",
+              previousStatus: currentApplication.status,
+            },
+          });
+        }
+      } else {
+        // Se a imobiliária respondeu e o status estiver em espera, restaura o status anterior
+        if (currentApplication.status === "WAITING_REAL_ESTATE_RETURN") {
+          const restoredStatus =
+            currentApplication.previousStatus || "WAITING_CONTRACT_DATA";
+
+          await prisma.rentalApplication.update({
+            where: { id: params.applicationId },
+            data: {
+              status: restoredStatus,
+              previousStatus: null,
+            },
+          });
+        }
+      }
+    }
+
     return message;
   }
 

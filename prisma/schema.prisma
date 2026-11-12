@@ -46,6 +46,7 @@ enum RentalApplicationStatus {
   ADMIN_REJECTED
   CANCELLED
   CONTRACT_DECLINED
+  WAITING_REAL_ESTATE_RETURN
 }
 
 enum AdminDecision {
@@ -296,6 +297,7 @@ model RentalApplication {
   decisionMetadata String?
 
   status RentalApplicationStatus @default(CONSULTED)
+  previousStatus RentalApplicationStatus?
 
   tenantName     String?
   tenantDocument String?
