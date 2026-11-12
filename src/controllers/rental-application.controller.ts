@@ -318,6 +318,25 @@ export class RentalApplicationController {
               order: "asc",
             },
           },
+          messages: {
+            take: 1,
+            orderBy: {
+              createdAt: "desc",
+            },
+            select: {
+              id: true,
+              content: true,
+              attachmentFileName: true,
+              isStaff: true,
+              createdAt: true,
+              sender: {
+                select: {
+                  name: true,
+                  role: true,
+                },
+              },
+            },
+          },
           _count: {
             select: {
               messages: {
@@ -339,6 +358,9 @@ export class RentalApplicationController {
     return response.json({
       applications: applications.map((application) => {
         const unreadCount = isSeller ? 0 : ((application as any)._count?.messages ?? 0);
+        const lastMessage = !isSeller && (application as any).messages?.[0] ? (application as any).messages[0] : null;
+        const hasChatHistory = !isSeller && Boolean(lastMessage);
+
         return {
           ...application,
           oragoData: isAdmin ? application.oragoData : undefined,
@@ -349,6 +371,16 @@ export class RentalApplicationController {
             : null,
           unreadMessagesCount: unreadCount,
           hasUnreadMessages: unreadCount > 0,
+          hasChatHistory,
+          lastChatMessage: lastMessage
+            ? {
+                content: lastMessage.content,
+                attachmentFileName: lastMessage.attachmentFileName,
+                isStaff: lastMessage.isStaff,
+                senderName: lastMessage.sender?.name,
+                createdAt: lastMessage.createdAt,
+              }
+            : null,
         };
       }),
       meta: {
