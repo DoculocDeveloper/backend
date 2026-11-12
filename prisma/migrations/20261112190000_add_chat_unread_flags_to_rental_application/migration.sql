@@ -28,3 +28,4 @@ WHERE EXISTS (
 -- ALTER TABLE "RentalApplication" DROP COLUMN IF EXISTS "hasUnreadStaffMessages";
 -- ALTER TABLE "RentalApplication" DROP COLUMN IF EXISTS "hasUnreadClientMessages";
 -- ALTER TABLE "RentalApplication" DROP COLUMN IF EXISTS "lastMessageAt";
+
