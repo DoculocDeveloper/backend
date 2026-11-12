@@ -86,6 +86,14 @@ export class RentalApplicationMessageService {
         where: { id: { in: unreadIds } },
         data: { readAt: new Date() },
       });
+
+      // Zera o indicador de mensagens não lidas pendentes para o papel atual
+      await prisma.rentalApplication.update({
+        where: { id: params.applicationId },
+        data: isStaff
+          ? { hasUnreadStaffMessages: false }
+          : { hasUnreadClientMessages: false },
+      });
     }
 
     return messages;
@@ -193,32 +201,43 @@ export class RentalApplicationMessageService {
           "CANCELLED",
         ];
 
-        if (
+        const shouldChangeStatus =
           currentApplication.status !== "WAITING_REAL_ESTATE_RETURN" &&
-          !nonTransitionStatuses.includes(currentApplication.status)
-        ) {
-          await prisma.rentalApplication.update({
-            where: { id: params.applicationId },
-            data: {
-              status: "WAITING_REAL_ESTATE_RETURN",
-              previousStatus: currentApplication.status,
-            },
-          });
-        }
-      } else {
-        // Se a imobiliária respondeu e o status estiver em espera, restaura o status anterior
-        if (currentApplication.status === "WAITING_REAL_ESTATE_RETURN") {
-          const restoredStatus =
-            currentApplication.previousStatus || "WAITING_CONTRACT_DATA";
+          !nonTransitionStatuses.includes(currentApplication.status);
 
-          await prisma.rentalApplication.update({
-            where: { id: params.applicationId },
-            data: {
-              status: restoredStatus,
-              previousStatus: null,
-            },
-          });
-        }
+        await prisma.rentalApplication.update({
+          where: { id: params.applicationId },
+          data: {
+            hasUnreadClientMessages: true,
+            lastMessageAt: new Date(),
+            ...(shouldChangeStatus
+              ? {
+                  status: "WAITING_REAL_ESTATE_RETURN",
+                  previousStatus: currentApplication.status,
+                }
+              : {}),
+          },
+        });
+      } else {
+        // Se a imobiliária enviou mensagem: marca mensagem pendente para o staff
+        const shouldRestoreStatus =
+          currentApplication.status === "WAITING_REAL_ESTATE_RETURN";
+        const restoredStatus =
+          currentApplication.previousStatus || "WAITING_CONTRACT_DATA";
+
+        await prisma.rentalApplication.update({
+          where: { id: params.applicationId },
+          data: {
+            hasUnreadStaffMessages: true,
+            lastMessageAt: new Date(),
+            ...(shouldRestoreStatus
+              ? {
+                  status: restoredStatus,
+                  previousStatus: null,
+                }
+              : {}),
+          },
+        });
       }
     }
 

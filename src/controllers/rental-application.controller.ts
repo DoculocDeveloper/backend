@@ -277,9 +277,15 @@ export class RentalApplicationController {
         where,
         skip: (query.page - 1) * query.perPage,
         take: query.perPage,
-        orderBy: {
-          createdAt: "desc",
-        },
+        orderBy: canSeeAllApplications
+          ? [
+              { hasUnreadStaffMessages: "desc" },
+              { createdAt: "desc" },
+            ]
+          : [
+              { hasUnreadClientMessages: "desc" },
+              { createdAt: "desc" },
+            ],
         include: {
           requester: {
             select: {
@@ -648,7 +654,8 @@ export class RentalApplicationController {
 
     const application = await rentalApplicationService.declineApplication({
       applicationId: params.id,
-      adminId: request.user!.id,
+      userId: request.user!.id,
+      userRole: request.user!.role,
       reason: body.reason,
     });
 

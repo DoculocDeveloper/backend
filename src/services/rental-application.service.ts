@@ -1,6 +1,7 @@
 // Libs
 import { RecommendationStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { UserRole } from "../domain/roles.js";
 
 // Errors
 import { AppError } from "../middlewares/error-handler.js";
@@ -1924,7 +1925,8 @@ export class RentalApplicationService {
 
   async declineApplication(params: {
     applicationId: string;
-    adminId: string;
+    userId: string;
+    userRole: string;
     reason?: string;
   }) {
     const application = await prisma.rentalApplication.findUnique({
@@ -1936,6 +1938,14 @@ export class RentalApplicationService {
 
     if (!application) {
       throw new AppError(404, "Consulta não encontrada");
+    }
+
+    const isStaff =
+      params.userRole === UserRole.ADMIN ||
+      params.userRole === UserRole.ACCOUNT_EXECUTIVE;
+
+    if (!isStaff && application.requesterId !== params.userId) {
+      throw new AppError(403, "Acesso negado a esta consulta");
     }
 
     if (application.contract?.signatureStatus === "SIGNED") {
@@ -1980,7 +1990,7 @@ export class RentalApplicationService {
           adminDecisionReason: params.reason
             ? `Declinado pelo locatário: ${params.reason}`
             : "Declinado pelo locatário",
-          adminDecisionById: params.adminId,
+          adminDecisionById: isStaff ? params.userId : application.adminDecisionById,
           adminDecisionAt: new Date(),
         },
       });

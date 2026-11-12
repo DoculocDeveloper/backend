@@ -328,6 +328,10 @@ model RentalApplication {
   isJointApplication  Boolean  @default(false)
   totalPresumedIncome Decimal?
 
+  hasUnreadStaffMessages  Boolean   @default(false)
+  hasUnreadClientMessages Boolean   @default(false)
+  lastMessageAt           DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -335,6 +339,8 @@ model RentalApplication {
   @@index([status])
   @@index([automaticDecision])
   @@index([adminViewedAt])
+  @@index([hasUnreadStaffMessages])
+  @@index([hasUnreadClientMessages])
 }
 
 model RentalApplicationTenant {

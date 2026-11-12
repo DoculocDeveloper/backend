@@ -114,7 +114,11 @@ rentalApplicationRoutes.post(
 
 rentalApplicationRoutes.post(
   "/:id/decline",
-  authorize(UserRole.ADMIN),
+  authorize(
+    UserRole.ADMIN,
+    UserRole.REAL_ESTATE,
+    UserRole.ACCOUNT_EXECUTIVE,
+  ),
   asyncHandler(rentalApplicationController.decline),
 );
 
