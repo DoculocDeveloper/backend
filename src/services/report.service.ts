@@ -26,6 +26,11 @@ export interface RealEstateReportItem {
     totalValue: number;
     rate: number;
   };
+  onlyConsultedApplications: {
+    count: number;
+    totalValue: number;
+    rate: number;
+  };
   generatedContracts: {
     count: number;
     totalValue: number;
@@ -57,6 +62,11 @@ export interface ReportsSummaryResult {
       totalValue: number;
       rate: number;
     };
+    totalOnlyConsultedApplications: {
+      count: number;
+      totalValue: number;
+      rate: number;
+    };
     totalGeneratedContracts: {
       count: number;
       totalValue: number;
@@ -69,6 +79,11 @@ export interface ReportsSummaryResult {
   totals: {
     totalApplications: number;
     rejectedApplications: {
+      count: number;
+      totalValue: number;
+      rate: number;
+    };
+    onlyConsultedApplications: {
       count: number;
       totalValue: number;
       rate: number;
@@ -179,6 +194,8 @@ export class ReportService {
         totalApplications: number;
         rejectedCount: number;
         rejectedValue: number;
+        onlyConsultedCount: number;
+        onlyConsultedValue: number;
         generatedCount: number;
         generatedValue: number;
         signedCount: number;
@@ -198,6 +215,8 @@ export class ReportService {
         totalApplications: 0,
         rejectedCount: 0,
         rejectedValue: 0,
+        onlyConsultedCount: 0,
+        onlyConsultedValue: 0,
         generatedCount: 0,
         generatedValue: 0,
         signedCount: 0,
@@ -210,6 +229,8 @@ export class ReportService {
     let globalTotalApplications = 0;
     let globalRejectedCount = 0;
     let globalRejectedValue = 0;
+    let globalOnlyConsultedCount = 0;
+    let globalOnlyConsultedValue = 0;
     let globalGeneratedCount = 0;
     let globalGeneratedValue = 0;
     let globalSignedCount = 0;
@@ -237,6 +258,8 @@ export class ReportService {
           totalApplications: 0,
           rejectedCount: 0,
           rejectedValue: 0,
+          onlyConsultedCount: 0,
+          onlyConsultedValue: 0,
           generatedCount: 0,
           generatedValue: 0,
           signedCount: 0,
@@ -280,11 +303,20 @@ export class ReportService {
         item.signedValue += val;
       }
 
-      if (app.status === "CONTRACT_DECLINED") {
+      const isDeclined = app.status === "CONTRACT_DECLINED";
+      if (isDeclined) {
         globalDeclinedCount += 1;
         globalDeclinedValue += val;
         item.declinedCount += 1;
         item.declinedValue += val;
+      }
+
+      const isOnlyConsulted = !isGenerated && !isRejected && !isDeclined;
+      if (isOnlyConsulted) {
+        globalOnlyConsultedCount += 1;
+        globalOnlyConsultedValue += val;
+        item.onlyConsultedCount += 1;
+        item.onlyConsultedValue += val;
       }
     }
 
@@ -312,6 +344,11 @@ export class ReportService {
           ? Number(((item.rejectedCount / item.totalApplications) * 100).toFixed(1))
           : 0;
 
+      const onlyConsultedRate =
+        item.totalApplications > 0
+          ? Number(((item.onlyConsultedCount / item.totalApplications) * 100).toFixed(1))
+          : 0;
+
       // Representatividade sobre o total de contratos assinados da Doculoc (ex: 10 de 500 = 2.0%)
       const signedSharePercentage =
         globalSignedCount > 0
@@ -333,6 +370,11 @@ export class ReportService {
           count: item.rejectedCount,
           totalValue: Number(item.rejectedValue.toFixed(2)),
           rate: rejectedRate,
+        },
+        onlyConsultedApplications: {
+          count: item.onlyConsultedCount,
+          totalValue: Number(item.onlyConsultedValue.toFixed(2)),
+          rate: onlyConsultedRate,
         },
         generatedContracts: {
           count: item.generatedCount,
@@ -375,6 +417,7 @@ export class ReportService {
       totals = {
         totalApplications: selected.totalApplications,
         rejectedApplications: selected.rejectedApplications,
+        onlyConsultedApplications: selected.onlyConsultedApplications,
         generatedContracts: selected.generatedContracts,
         signedContracts: selected.signedContracts,
         declinedContracts: selected.declinedContracts,
@@ -400,6 +443,10 @@ export class ReportService {
         globalTotalApplications > 0
           ? Number(((globalRejectedCount / globalTotalApplications) * 100).toFixed(1))
           : 0;
+      const globalOnlyConsultedRate =
+        globalTotalApplications > 0
+          ? Number(((globalOnlyConsultedCount / globalTotalApplications) * 100).toFixed(1))
+          : 0;
 
       totals = {
         totalApplications: globalTotalApplications,
@@ -407,6 +454,11 @@ export class ReportService {
           count: globalRejectedCount,
           totalValue: Number(globalRejectedValue.toFixed(2)),
           rate: globalRejectedRate,
+        },
+        onlyConsultedApplications: {
+          count: globalOnlyConsultedCount,
+          totalValue: Number(globalOnlyConsultedValue.toFixed(2)),
+          rate: globalOnlyConsultedRate,
         },
         generatedContracts: {
           count: globalGeneratedCount,
@@ -431,6 +483,10 @@ export class ReportService {
       globalTotalApplications > 0
         ? Number(((globalRejectedCount / globalTotalApplications) * 100).toFixed(1))
         : 0;
+    const globalOnlyConsultedRate =
+      globalTotalApplications > 0
+        ? Number(((globalOnlyConsultedCount / globalTotalApplications) * 100).toFixed(1))
+        : 0;
 
     return {
       period: {
@@ -443,6 +499,11 @@ export class ReportService {
           count: globalRejectedCount,
           totalValue: Number(globalRejectedValue.toFixed(2)),
           rate: globalRejectedRate,
+        },
+        totalOnlyConsultedApplications: {
+          count: globalOnlyConsultedCount,
+          totalValue: Number(globalOnlyConsultedValue.toFixed(2)),
+          rate: globalOnlyConsultedRate,
         },
         totalGeneratedContracts: {
           count: globalGeneratedCount,
