@@ -21,6 +21,11 @@ export interface RealEstateReportItem {
   email: string;
   document: string | null;
   totalApplications: number;
+  rejectedApplications: {
+    count: number;
+    totalValue: number;
+    rate: number;
+  };
   generatedContracts: {
     count: number;
     totalValue: number;
@@ -47,6 +52,11 @@ export interface ReportsSummaryResult {
   };
   doculocGlobal: {
     totalApplications: number;
+    totalRejectedApplications: {
+      count: number;
+      totalValue: number;
+      rate: number;
+    };
     totalGeneratedContracts: {
       count: number;
       totalValue: number;
@@ -58,6 +68,11 @@ export interface ReportsSummaryResult {
   };
   totals: {
     totalApplications: number;
+    rejectedApplications: {
+      count: number;
+      totalValue: number;
+      rate: number;
+    };
     generatedContracts: {
       count: number;
       totalValue: number;
@@ -160,6 +175,8 @@ export class ReportService {
         email: string;
         document: string | null;
         totalApplications: number;
+        rejectedCount: number;
+        rejectedValue: number;
         generatedCount: number;
         generatedValue: number;
         signedCount: number;
@@ -177,6 +194,8 @@ export class ReportService {
         document:
           re.realEstateProfile?.document || re.realEstateProfile?.cnpj || null,
         totalApplications: 0,
+        rejectedCount: 0,
+        rejectedValue: 0,
         generatedCount: 0,
         generatedValue: 0,
         signedCount: 0,
@@ -187,6 +206,8 @@ export class ReportService {
     }
 
     let globalTotalApplications = 0;
+    let globalRejectedCount = 0;
+    let globalRejectedValue = 0;
     let globalGeneratedCount = 0;
     let globalGeneratedValue = 0;
     let globalSignedCount = 0;
@@ -212,6 +233,8 @@ export class ReportService {
             app.requester?.realEstateProfile?.cnpj ||
             null,
           totalApplications: 0,
+          rejectedCount: 0,
+          rejectedValue: 0,
           generatedCount: 0,
           generatedValue: 0,
           signedCount: 0,
@@ -223,6 +246,15 @@ export class ReportService {
       }
 
       item.totalApplications += 1;
+
+      const isRejected =
+        app.status === "ADMIN_REJECTED" || app.status === "REJECTED";
+      if (isRejected) {
+        globalRejectedCount += 1;
+        globalRejectedValue += val;
+        item.rejectedCount += 1;
+        item.rejectedValue += val;
+      }
 
       const isGenerated = app.status === "CONTRACT_GENERATED";
       const isSigned =
@@ -271,6 +303,11 @@ export class ReportService {
           ? Number(((item.signedCount / item.generatedCount) * 100).toFixed(1))
           : 0;
 
+      const rejectedRate =
+        item.totalApplications > 0
+          ? Number(((item.rejectedCount / item.totalApplications) * 100).toFixed(1))
+          : 0;
+
       // Representatividade sobre o total de contratos assinados da Doculoc (ex: 10 de 500 = 2.0%)
       const signedSharePercentage =
         globalSignedCount > 0
@@ -288,6 +325,11 @@ export class ReportService {
         email: item.email,
         document: item.document,
         totalApplications: item.totalApplications,
+        rejectedApplications: {
+          count: item.rejectedCount,
+          totalValue: Number(item.rejectedValue.toFixed(2)),
+          rate: rejectedRate,
+        },
         generatedContracts: {
           count: item.generatedCount,
           totalValue: Number(item.generatedValue.toFixed(2)),
@@ -328,6 +370,7 @@ export class ReportService {
       const selected = filteredRealEstates[0];
       totals = {
         totalApplications: selected.totalApplications,
+        rejectedApplications: selected.rejectedApplications,
         generatedContracts: selected.generatedContracts,
         signedContracts: selected.signedContracts,
         declinedContracts: selected.declinedContracts,
@@ -349,9 +392,18 @@ export class ReportService {
         globalGeneratedCount > 0
           ? Number(((globalSignedCount / globalGeneratedCount) * 100).toFixed(1))
           : 0;
+      const globalRejectedRate =
+        globalTotalApplications > 0
+          ? Number(((globalRejectedCount / globalTotalApplications) * 100).toFixed(1))
+          : 0;
 
       totals = {
         totalApplications: globalTotalApplications,
+        rejectedApplications: {
+          count: globalRejectedCount,
+          totalValue: Number(globalRejectedValue.toFixed(2)),
+          rate: globalRejectedRate,
+        },
         generatedContracts: {
           count: globalGeneratedCount,
           totalValue: Number(globalGeneratedValue.toFixed(2)),
@@ -371,6 +423,11 @@ export class ReportService {
       };
     }
 
+    const globalRejectedRate =
+      globalTotalApplications > 0
+        ? Number(((globalRejectedCount / globalTotalApplications) * 100).toFixed(1))
+        : 0;
+
     return {
       period: {
         startDate,
@@ -378,6 +435,11 @@ export class ReportService {
       },
       doculocGlobal: {
         totalApplications: globalTotalApplications,
+        totalRejectedApplications: {
+          count: globalRejectedCount,
+          totalValue: Number(globalRejectedValue.toFixed(2)),
+          rate: globalRejectedRate,
+        },
         totalGeneratedContracts: {
           count: globalGeneratedCount,
           totalValue: Number(globalGeneratedValue.toFixed(2)),
