@@ -115,6 +115,8 @@ export class ReportService {
       select: {
         id: true,
         status: true,
+        adminDecision: true,
+        automaticDecision: true,
         rentValue: true,
         requestedExpense: true,
         requesterId: true,
@@ -248,7 +250,9 @@ export class ReportService {
       item.totalApplications += 1;
 
       const isRejected =
-        app.status === "ADMIN_REJECTED" || app.status === "REJECTED";
+        app.status === "ADMIN_REJECTED" ||
+        app.status === "REJECTED" ||
+        app.adminDecision === "REJECTED";
       if (isRejected) {
         globalRejectedCount += 1;
         globalRejectedValue += val;
