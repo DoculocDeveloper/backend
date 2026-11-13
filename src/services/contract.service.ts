@@ -494,7 +494,12 @@ export class ContractService {
       throw new AppError(404, "Consulta não encontrada");
     }
 
-    if (application.status !== "WAITING_ADMIN_CONTRACT") {
+    const canGenerate =
+      application.status === "WAITING_ADMIN_CONTRACT" ||
+      (application.status === "WAITING_REAL_ESTATE_RETURN" &&
+        application.previousStatus === "WAITING_ADMIN_CONTRACT");
+
+    if (!canGenerate) {
       throw new AppError(
         400,
         "Essa consulta ainda não está pronta para geração de contrato.",
@@ -599,6 +604,7 @@ export class ContractService {
         },
         data: {
           status: "CONTRACT_GENERATED",
+          previousStatus: null,
         },
       });
 
