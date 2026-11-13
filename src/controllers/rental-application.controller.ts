@@ -532,6 +532,56 @@ export class RentalApplicationController {
       application.adminViewedAt = now;
     }
 
+    // Auto-sincronização de status com o histórico do chat:
+    // Se a última mensagem foi enviada pela Doculoc (staff) e a imobiliária ainda não respondeu,
+    // sincroniza o status para WAITING_REAL_ESTATE_RETURN garantindo que consultas pendentes de resposta reflitam o estado real.
+    const lastChatMessage = await prisma.rentalApplicationMessage.findFirst({
+      where: { applicationId: application.id },
+      orderBy: { createdAt: "desc" },
+      select: { isStaff: true },
+    });
+
+    if (lastChatMessage) {
+      const nonTransitionStatuses = [
+        "CONTRACT_DECLINED",
+        "CANCELLED",
+        "CONTRACT_GENERATED",
+      ];
+
+      if (
+        lastChatMessage.isStaff &&
+        application.status !== "WAITING_REAL_ESTATE_RETURN" &&
+        !nonTransitionStatuses.includes(application.status)
+      ) {
+        await prisma.rentalApplication.update({
+          where: { id: application.id },
+          data: {
+            status: "WAITING_REAL_ESTATE_RETURN",
+            previousStatus: application.status,
+            hasUnreadClientMessages: true,
+          },
+        });
+        application.previousStatus = application.status;
+        application.status = "WAITING_REAL_ESTATE_RETURN";
+      } else if (
+        !lastChatMessage.isStaff &&
+        application.status === "WAITING_REAL_ESTATE_RETURN"
+      ) {
+        const restoredStatus =
+          application.previousStatus || "WAITING_CONTRACT_DATA";
+        await prisma.rentalApplication.update({
+          where: { id: application.id },
+          data: {
+            status: restoredStatus as any,
+            previousStatus: null,
+            hasUnreadStaffMessages: true,
+          },
+        });
+        application.status = restoredStatus as any;
+        application.previousStatus = null;
+      }
+    }
+
     const parsedOragoData = parseJsonSafe(application.oragoData);
 
     const tenantName =

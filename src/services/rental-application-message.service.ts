@@ -96,6 +96,54 @@ export class RentalApplicationMessageService {
       });
     }
 
+    // Auto-sincronização retroativa de status com o chat:
+    // Se a última mensagem foi enviada pelo administrador (staff) e a consulta não estiver em status terminal,
+    // sincroniza o status para WAITING_REAL_ESTATE_RETURN caso ainda não esteja.
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      const nonTransitionStatuses = [
+        "CONTRACT_DECLINED",
+        "CANCELLED",
+        "CONTRACT_GENERATED",
+      ];
+
+      const currentApp = await prisma.rentalApplication.findUnique({
+        where: { id: params.applicationId },
+        select: { id: true, status: true, previousStatus: true },
+      });
+
+      if (currentApp) {
+        if (
+          lastMsg.isStaff &&
+          currentApp.status !== "WAITING_REAL_ESTATE_RETURN" &&
+          !nonTransitionStatuses.includes(currentApp.status)
+        ) {
+          await prisma.rentalApplication.update({
+            where: { id: params.applicationId },
+            data: {
+              status: "WAITING_REAL_ESTATE_RETURN",
+              previousStatus: currentApp.status,
+              hasUnreadClientMessages: true,
+            },
+          });
+        } else if (
+          !lastMsg.isStaff &&
+          currentApp.status === "WAITING_REAL_ESTATE_RETURN"
+        ) {
+          const restoredStatus =
+            currentApp.previousStatus || "WAITING_CONTRACT_DATA";
+          await prisma.rentalApplication.update({
+            where: { id: params.applicationId },
+            data: {
+              status: restoredStatus as any,
+              previousStatus: null,
+              hasUnreadStaffMessages: true,
+            },
+          });
+        }
+      }
+    }
+
     return messages;
   }
 
@@ -156,9 +204,10 @@ export class RentalApplicationMessageService {
       attachmentSizeBytes = params.file.size;
     }
 
+    const roleUpper = String(params.senderRole || "").toUpperCase();
     const isStaff =
-      params.senderRole === UserRole.ADMIN ||
-      params.senderRole === UserRole.ACCOUNT_EXECUTIVE;
+      roleUpper === UserRole.ADMIN ||
+      roleUpper === UserRole.ACCOUNT_EXECUTIVE;
 
     const message = await prisma.rentalApplicationMessage.create({
       data: {
