@@ -235,7 +235,20 @@ export class RentalApplicationController {
         OR: [
           { status: "WAITING_ADMIN_CONTRACT" as const },
           {
+            status: "WAITING_REAL_ESTATE_RETURN" as const,
+            previousStatus: "WAITING_ADMIN_CONTRACT" as const,
+          },
+          {
             status: "CONTRACT_GENERATED" as const,
+            contract: {
+              is: {
+                signatureStatus: { not: "SIGNED" as const },
+              },
+            },
+          },
+          {
+            status: "WAITING_REAL_ESTATE_RETURN" as const,
+            previousStatus: "CONTRACT_GENERATED" as const,
             contract: {
               is: {
                 signatureStatus: { not: "SIGNED" as const },
@@ -247,7 +260,13 @@ export class RentalApplicationController {
       };
     } else if (query.contractView === "SIGNED") {
       baseWhere = {
-        status: "CONTRACT_GENERATED" as const,
+        OR: [
+          { status: "CONTRACT_GENERATED" as const },
+          {
+            status: "WAITING_REAL_ESTATE_RETURN" as const,
+            previousStatus: "CONTRACT_GENERATED" as const,
+          },
+        ],
         contract: {
           is: {
             signatureStatus: "SIGNED" as const,
@@ -535,6 +554,7 @@ export class RentalApplicationController {
     // Auto-sincronização de status com o histórico do chat:
     // Se a última mensagem foi enviada pela Doculoc (staff) e a imobiliária ainda não respondeu,
     // sincroniza o status para WAITING_REAL_ESTATE_RETURN garantindo que consultas pendentes de resposta reflitam o estado real.
+    // Se a imobiliária respondeu, restaura automaticamente para o status anterior (previousStatus).
     const lastChatMessage = await prisma.rentalApplicationMessage.findFirst({
       where: { applicationId: application.id },
       orderBy: { createdAt: "desc" },
@@ -545,7 +565,6 @@ export class RentalApplicationController {
       const nonTransitionStatuses = [
         "CONTRACT_DECLINED",
         "CANCELLED",
-        "CONTRACT_GENERATED",
       ];
 
       if (

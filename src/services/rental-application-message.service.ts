@@ -97,19 +97,22 @@ export class RentalApplicationMessageService {
     }
 
     // Auto-sincronização retroativa de status com o chat:
-    // Se a última mensagem foi enviada pelo administrador (staff) e a consulta não estiver em status terminal,
-    // sincroniza o status para WAITING_REAL_ESTATE_RETURN caso ainda não esteja.
+    // Se a última mensagem foi enviada pelo administrador (staff), sincroniza o status para WAITING_REAL_ESTATE_RETURN.
+    // Se a imobiliária respondeu, restaura o status para o status anterior (previousStatus, ex: CONTRACT_GENERATED).
     if (messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
       const nonTransitionStatuses = [
         "CONTRACT_DECLINED",
         "CANCELLED",
-        "CONTRACT_GENERATED",
       ];
 
       const currentApp = await prisma.rentalApplication.findUnique({
         where: { id: params.applicationId },
-        select: { id: true, status: true, previousStatus: true },
+        select: {
+          id: true,
+          status: true,
+          previousStatus: true,
+        },
       });
 
       if (currentApp) {
@@ -244,7 +247,8 @@ export class RentalApplicationMessageService {
 
     if (currentApplication) {
       if (isStaff) {
-        // Se administrador/staff mandou mensagem e a consulta não estiver cancelada ou declinada
+        // Se administrador/staff mandou mensagem e a consulta não estiver cancelada ou declinada:
+        // Move para WAITING_REAL_ESTATE_RETURN e guarda o status atual em previousStatus (inclusive CONTRACT_GENERATED)
         const nonTransitionStatuses = [
           "CONTRACT_DECLINED",
           "CANCELLED",
@@ -268,7 +272,7 @@ export class RentalApplicationMessageService {
           },
         });
       } else {
-        // Se a imobiliária enviou mensagem: marca mensagem pendente para o staff
+        // Se a imobiliária enviou mensagem: restaura automaticamente para o status anterior (previousStatus)
         const shouldRestoreStatus =
           currentApplication.status === "WAITING_REAL_ESTATE_RETURN";
         const restoredStatus =
@@ -281,7 +285,7 @@ export class RentalApplicationMessageService {
             lastMessageAt: new Date(),
             ...(shouldRestoreStatus
               ? {
-                  status: restoredStatus,
+                  status: restoredStatus as any,
                   previousStatus: null,
                 }
               : {}),
