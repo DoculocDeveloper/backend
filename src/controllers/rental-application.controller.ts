@@ -99,6 +99,34 @@ export class RentalApplicationController {
   async list(request: Request, response: Response) {
     const query = listRentalApplicationsSchema.parse(request.query);
 
+    // Auto-recuperação de consultas que ficaram pendentes em processamento na Órago:
+    // Se houver algum lock em PROCESSING criado há mais de 30 segundos, tenta coletar da Órago e finalizar
+    try {
+      const pendingLocks = await prisma.oragoConsultLock.findMany({
+        where: {
+          status: "PROCESSING",
+          createdAt: {
+            lte: new Date(Date.now() - 30 * 1000),
+          },
+        },
+        take: 3,
+      });
+
+      if (pendingLocks.length > 0) {
+        await Promise.allSettled(
+          pendingLocks.map((lock) =>
+            rentalApplicationService.getConsultStatus({
+              consultLockId: lock.id,
+              requesterId: lock.requesterId,
+              role: UserRole.ADMIN,
+            }),
+          ),
+        );
+      }
+    } catch (err) {
+      console.warn("[AUTO_RESOLVE_PENDING_LOCKS_ERROR]", err);
+    }
+
     const canSeeAllApplications =
       request.user!.role === UserRole.ADMIN ||
       request.user!.role === UserRole.ACCOUNT_EXECUTIVE;
