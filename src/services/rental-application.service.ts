@@ -159,63 +159,69 @@ export class RentalApplicationService {
   }) {
     const creditsToConsume = params.creditsToConsume ?? 1;
 
-    return prisma.$transaction(async (tx) => {
-      const wallet = await tx.userCreditWallet.findUnique({
-        where: { userId: params.requesterId },
-      });
+    return prisma.$transaction(
+      async (tx) => {
+        const wallet = await tx.userCreditWallet.findUnique({
+          where: { userId: params.requesterId },
+        });
 
-      if (!wallet) {
-        throw new AppError(403, "Carteira de créditos não encontrada");
-      }
+        if (!wallet) {
+          throw new AppError(403, "Carteira de créditos não encontrada");
+        }
 
-      if (!wallet.isVip && wallet.availableCredits < creditsToConsume) {
-        throw new AppError(
-          402,
-          creditsToConsume > 1
-            ? `Você precisa de pelo menos ${creditsToConsume} consultas disponíveis para realizar esta análise conjunta.`
-            : "Usuário sem consultas disponíveis",
-        );
-      }
+        if (!wallet.isVip && wallet.availableCredits < creditsToConsume) {
+          throw new AppError(
+            402,
+            creditsToConsume > 1
+              ? `Você precisa de pelo menos ${creditsToConsume} consultas disponíveis para realizar esta análise conjunta.`
+              : "Usuário sem consultas disponíveis",
+          );
+        }
 
-      const createdApplication = await tx.rentalApplication.create({
-        data: params.data,
-      });
+        const createdApplication = await tx.rentalApplication.create({
+          data: params.data,
+        });
 
-      if (wallet.isVip) {
+        if (wallet.isVip) {
+          await tx.creditLedger.create({
+            data: {
+              userId: params.requesterId,
+              type: "CONSULT_USED",
+              amount: 0,
+              balanceAfter: wallet.availableCredits,
+              reason: `Consulta realizada como VIP. Application: ${createdApplication.id}`,
+            },
+          });
+
+          return createdApplication;
+        }
+
+        const updatedWallet = await tx.userCreditWallet.update({
+          where: { userId: params.requesterId },
+          data: {
+            availableCredits: {
+              decrement: creditsToConsume,
+            },
+          },
+        });
+
         await tx.creditLedger.create({
           data: {
             userId: params.requesterId,
             type: "CONSULT_USED",
-            amount: 0,
-            balanceAfter: wallet.availableCredits,
-            reason: `Consulta realizada como VIP. Application: ${createdApplication.id}`,
+            amount: -creditsToConsume,
+            balanceAfter: updatedWallet.availableCredits,
+            reason: `${creditsToConsume} crédito(s) consumido(s) na consulta. Application: ${createdApplication.id}`,
           },
         });
 
         return createdApplication;
-      }
-
-      const updatedWallet = await tx.userCreditWallet.update({
-        where: { userId: params.requesterId },
-        data: {
-          availableCredits: {
-            decrement: creditsToConsume,
-          },
-        },
-      });
-
-      await tx.creditLedger.create({
-        data: {
-          userId: params.requesterId,
-          type: "CONSULT_USED",
-          amount: -creditsToConsume,
-          balanceAfter: updatedWallet.availableCredits,
-          reason: `${creditsToConsume} crédito(s) consumido(s) na consulta. Application: ${createdApplication.id}`,
-        },
-      });
-
-      return createdApplication;
-    });
+      },
+      {
+        maxWait: 15000,
+        timeout: 30000,
+      },
+    );
   }
 
   private async assertDocumentWasNotConsulted(document: string) {
@@ -1205,10 +1211,24 @@ export class RentalApplicationService {
     }
 
     if (lock.status === "FAILED") {
-      return {
-        status: "FAILED",
-        message: lock.errorMessage ?? "A consulta falhou.",
-      };
+      const isRecoverableTimeoutError =
+        Boolean(lock.oragoAnalysisId) &&
+        Boolean(
+          lock.errorMessage?.includes("Transaction already closed") ||
+          lock.errorMessage?.includes("timeout") ||
+          lock.errorMessage?.includes("Interactive transaction")
+        );
+
+      if (!isRecoverableTimeoutError) {
+        return {
+          status: "FAILED",
+          message: lock.errorMessage ?? "A consulta falhou.",
+        };
+      }
+
+      console.info(
+        `[getConsultStatus] Auto-recuperando lock ${lock.id} (${lock.document}) que falhou por timeout de transação.`,
+      );
     }
 
     if (!lock.oragoAnalysisId) {
@@ -1644,7 +1664,7 @@ export class RentalApplicationService {
       });
 
       return updated;
-    });
+    }, { maxWait: 15000, timeout: 30000 });
 
     return updatedApplication;
   }
@@ -1706,7 +1726,7 @@ export class RentalApplicationService {
       });
 
       return createdContest;
-    });
+    }, { maxWait: 15000, timeout: 30000 });
 
     return contest;
   }
@@ -1780,7 +1800,7 @@ export class RentalApplicationService {
       });
 
       return updated;
-    });
+    }, { maxWait: 15000, timeout: 30000 });
 
     return updatedApplication;
   }
@@ -1822,7 +1842,7 @@ export class RentalApplicationService {
           id: application.id,
         },
       });
-    });
+    }, { maxWait: 15000, timeout: 30000 });
 
     return {
       deleted: true,
@@ -1897,7 +1917,7 @@ export class RentalApplicationService {
           status: "WAITING_CONTRACT_DATA",
         },
       });
-    });
+    }, { maxWait: 15000, timeout: 30000 });
 
     return prisma.rentalApplication.findUnique({
       where: {
@@ -1994,7 +2014,7 @@ export class RentalApplicationService {
           adminDecisionAt: new Date(),
         },
       });
-    });
+    }, { maxWait: 15000, timeout: 30000 });
 
     return prisma.rentalApplication.findUnique({
       where: { id: params.applicationId },

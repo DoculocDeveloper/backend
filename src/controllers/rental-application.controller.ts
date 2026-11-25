@@ -104,12 +104,22 @@ export class RentalApplicationController {
     try {
       const pendingLocks = await prisma.oragoConsultLock.findMany({
         where: {
-          status: "PROCESSING",
-          createdAt: {
-            lte: new Date(Date.now() - 30 * 1000),
-          },
+          OR: [
+            {
+              status: "PROCESSING",
+              createdAt: {
+                lte: new Date(Date.now() - 30 * 1000),
+              },
+            },
+            {
+              status: "FAILED",
+              errorMessage: {
+                contains: "Transaction already closed",
+              },
+            },
+          ],
         },
-        take: 3,
+        take: 5,
       });
 
       if (pendingLocks.length > 0) {
