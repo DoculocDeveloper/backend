@@ -772,16 +772,76 @@ export class RentalApplicationService {
         document: true,
         secondDocument: true,
         documentType: true,
+        oragoAnalysisId: true,
       },
     });
 
     let lock: any = null;
 
     if (existingLock) {
-      if (
-        existingLock.requesterId === input.requesterId &&
-        existingLock.status === "PROCESSING"
-      ) {
+      if (existingLock.requesterId !== input.requesterId) {
+        throw new AppError(
+          409,
+          "Este CPF já possui uma consulta cadastrada por outro usuário.",
+          "DOCUMENT_CONSULT_IN_PROGRESS",
+        );
+      }
+
+      // Se já existe análise gerada na Órago para este lock, NUNCA gerar nova cobrança/análise na Órago!
+      // Reaproveitamos a análise existente para evitar cobrança duplicada.
+      if (existingLock.oragoAnalysisId) {
+        await prisma.oragoConsultLock.update({
+          where: { id: existingLock.id },
+          data: {
+            status: "PROCESSING",
+            errorMessage: null,
+            rentValue: input.rentValue,
+            condominiumValue: input.condominiumValue,
+            feesValue: input.feesValue,
+          },
+        });
+
+        const consultStatus = await this.getConsultStatus({
+          consultLockId: existingLock.id,
+          requesterId: input.requesterId,
+          role: "REAL_ESTATE",
+        });
+
+        if (consultStatus.status === "COMPLETED") {
+          return {
+            pending: false,
+            status: "COMPLETED",
+            application: (consultStatus as any).application,
+            decision: (consultStatus as any).decision,
+          };
+        }
+
+        return {
+          pending: true,
+          status: "PROCESSING",
+          consultLockId: existingLock.id,
+          document: existingLock.document,
+          documentType: existingLock.documentType,
+          message:
+            "A análise deste documento já foi enviada à Órago e está sendo finalizada.",
+        };
+      }
+
+      if (existingLock.status === "FAILED") {
+        lock = await prisma.oragoConsultLock.update({
+          where: { id: existingLock.id },
+          data: {
+            status: "PROCESSING",
+            errorMessage: null,
+            secondDocument: extraCpfs[0] ?? null,
+            additionalDocuments:
+              extraCpfs.length > 0 ? JSON.stringify(extraCpfs) : null,
+            rentValue: input.rentValue,
+            condominiumValue: input.condominiumValue,
+            feesValue: input.feesValue,
+          },
+        });
+      } else {
         return {
           pending: true,
           status: "PROCESSING",
@@ -791,34 +851,6 @@ export class RentalApplicationService {
           message:
             "Esta consulta já está em processamento. Acompanhando o status da análise.",
         };
-      }
-
-      if (
-        existingLock.requesterId === input.requesterId &&
-        existingLock.status === "FAILED"
-      ) {
-        lock = await prisma.oragoConsultLock.update({
-          where: { id: existingLock.id },
-          data: {
-            status: "PROCESSING",
-            errorMessage: null,
-            oragoAnalysisId: null,
-            secondOragoAnalysisId: null,
-            secondDocument: extraCpfs[0] ?? null,
-            additionalDocuments:
-              extraCpfs.length > 0 ? JSON.stringify(extraCpfs) : null,
-            additionalOragoAnalysisIds: null,
-            rentValue: input.rentValue,
-            condominiumValue: input.condominiumValue,
-            feesValue: input.feesValue,
-          },
-        });
-      } else {
-        throw new AppError(
-          409,
-          "Este CPF/CNPJ já possui uma consulta em processamento ou já foi consultado.",
-          "DOCUMENT_CONSULT_IN_PROGRESS",
-        );
       }
     } else {
       lock = await this.createConsultLock({
@@ -1023,16 +1055,72 @@ export class RentalApplicationService {
         status: true,
         document: true,
         documentType: true,
+        oragoAnalysisId: true,
       },
     });
 
     let lock: any = null;
 
     if (existingLock) {
-      if (
-        existingLock.requesterId === input.requesterId &&
-        existingLock.status === "PROCESSING"
-      ) {
+      if (existingLock.requesterId !== input.requesterId) {
+        throw new AppError(
+          409,
+          "Este CNPJ já possui uma consulta cadastrada por outro usuário.",
+          "DOCUMENT_CONSULT_IN_PROGRESS",
+        );
+      }
+
+      // Se já existe oragoAnalysisId, NUNCA gerar nova cobrança/análise na Órago!
+      if (existingLock.oragoAnalysisId) {
+        await prisma.oragoConsultLock.update({
+          where: { id: existingLock.id },
+          data: {
+            status: "PROCESSING",
+            errorMessage: null,
+            rentValue: input.rentValue,
+            condominiumValue: input.condominiumValue,
+            feesValue: input.feesValue,
+          },
+        });
+
+        const consultStatus = await this.getConsultStatus({
+          consultLockId: existingLock.id,
+          requesterId: input.requesterId,
+          role: "REAL_ESTATE",
+        });
+
+        if (consultStatus.status === "COMPLETED") {
+          return {
+            pending: false,
+            status: "COMPLETED",
+            application: (consultStatus as any).application,
+            decision: (consultStatus as any).decision,
+          };
+        }
+
+        return {
+          pending: true,
+          status: "PROCESSING",
+          consultLockId: existingLock.id,
+          document: existingLock.document,
+          documentType: existingLock.documentType,
+          message:
+            "A análise deste documento já foi enviada à Órago e está sendo finalizada.",
+        };
+      }
+
+      if (existingLock.status === "FAILED") {
+        lock = await prisma.oragoConsultLock.update({
+          where: { id: existingLock.id },
+          data: {
+            status: "PROCESSING",
+            errorMessage: null,
+            rentValue: input.rentValue,
+            condominiumValue: input.condominiumValue,
+            feesValue: input.feesValue,
+          },
+        });
+      } else {
         return {
           pending: true,
           status: "PROCESSING",
@@ -1042,29 +1130,6 @@ export class RentalApplicationService {
           message:
             "Esta consulta já está em processamento. Acompanhando o status da análise.",
         };
-      }
-
-      if (
-        existingLock.requesterId === input.requesterId &&
-        existingLock.status === "FAILED"
-      ) {
-        lock = await prisma.oragoConsultLock.update({
-          where: { id: existingLock.id },
-          data: {
-            status: "PROCESSING",
-            errorMessage: null,
-            oragoAnalysisId: null,
-            rentValue: input.rentValue,
-            condominiumValue: input.condominiumValue,
-            feesValue: input.feesValue,
-          },
-        });
-      } else {
-        throw new AppError(
-          409,
-          "Este CPF/CNPJ já possui uma consulta em processamento ou já foi consultado.",
-          "DOCUMENT_CONSULT_IN_PROGRESS",
-        );
       }
     } else {
       lock = await this.createConsultLock({
