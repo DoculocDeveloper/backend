@@ -396,10 +396,15 @@ export class ReportService {
       };
     });
 
+    // Filtrar apenas imobiliárias que possuem pelo menos 1 consulta no período
+    const realEstatesWithApplications = allRealEstatesResult.filter(
+      (re) => re.totalApplications > 0
+    );
+
     // Se filtrou por uma imobiliária específica, filtra a lista para ela
     const filteredRealEstates = requesterId
-      ? allRealEstatesResult.filter((re) => re.id === requesterId)
-      : allRealEstatesResult.sort((a, b) => {
+      ? realEstatesWithApplications.filter((re) => re.id === requesterId)
+      : realEstatesWithApplications.sort((a, b) => {
           // Ordena primeiro por contratos assinados (receita fechada), depois por total de consultas
           if (b.signedContracts.count !== a.signedContracts.count) {
             return b.signedContracts.count - a.signedContracts.count;
@@ -425,6 +430,19 @@ export class ReportService {
         conversionRate: selected.conversionRate,
         signedConversionRate: selected.signedConversionRate,
         signedSharePercentage: selected.signedSharePercentage,
+      };
+    } else if (requesterId) {
+      totals = {
+        totalApplications: 0,
+        rejectedApplications: { count: 0, totalValue: 0, rate: 0 },
+        onlyConsultedApplications: { count: 0, totalValue: 0, rate: 0 },
+        generatedContracts: { count: 0, totalValue: 0 },
+        signedContracts: { count: 0, totalValue: 0 },
+        declinedContracts: { count: 0, totalValue: 0 },
+        averageTicket: 0,
+        conversionRate: 0,
+        signedConversionRate: 0,
+        signedSharePercentage: 0,
       };
     } else {
       const globalAverageTicket =
