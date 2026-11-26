@@ -96,57 +96,6 @@ export class RentalApplicationMessageService {
       });
     }
 
-    // Auto-sincronização retroativa de status com o chat:
-    // Se a última mensagem foi enviada pelo administrador (staff), sincroniza o status para WAITING_REAL_ESTATE_RETURN.
-    // Se a imobiliária respondeu, restaura o status para o status anterior (previousStatus, ex: CONTRACT_GENERATED).
-    if (messages.length > 0) {
-      const lastMsg = messages[messages.length - 1];
-      const nonTransitionStatuses = [
-        "CONTRACT_DECLINED",
-        "CANCELLED",
-      ];
-
-      const currentApp = await prisma.rentalApplication.findUnique({
-        where: { id: params.applicationId },
-        select: {
-          id: true,
-          status: true,
-          previousStatus: true,
-        },
-      });
-
-      if (currentApp) {
-        if (
-          lastMsg.isStaff &&
-          currentApp.status !== "WAITING_REAL_ESTATE_RETURN" &&
-          !nonTransitionStatuses.includes(currentApp.status)
-        ) {
-          await prisma.rentalApplication.update({
-            where: { id: params.applicationId },
-            data: {
-              status: "WAITING_REAL_ESTATE_RETURN",
-              previousStatus: currentApp.status,
-              hasUnreadClientMessages: true,
-            },
-          });
-        } else if (
-          !lastMsg.isStaff &&
-          currentApp.status === "WAITING_REAL_ESTATE_RETURN"
-        ) {
-          const restoredStatus =
-            currentApp.previousStatus || "WAITING_CONTRACT_DATA";
-          await prisma.rentalApplication.update({
-            where: { id: params.applicationId },
-            data: {
-              status: restoredStatus as any,
-              previousStatus: null,
-              hasUnreadStaffMessages: true,
-            },
-          });
-        }
-      }
-    }
-
     return messages;
   }
 
@@ -247,14 +196,29 @@ export class RentalApplicationMessageService {
 
     if (currentApplication) {
       if (isStaff) {
-        // Se administrador/staff mandou mensagem e a consulta não estiver cancelada ou declinada:
-        // Move para WAITING_REAL_ESTATE_RETURN e guarda o status atual em previousStatus (inclusive CONTRACT_GENERATED)
+        // Verificar se a mensagem anterior no chat foi da imobiliária (cliente)
+        const previousMessage = await prisma.rentalApplicationMessage.findFirst({
+          where: {
+            applicationId: params.applicationId,
+            id: { not: message.id },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { isStaff: true },
+        });
+
+        // Se a mensagem anterior foi da imobiliária e o status NÃO é WAITING_REAL_ESTATE_RETURN,
+        // a staff está apenas respondendo/agradecendo ao retorno da imobiliária (ex: "muito obrigada"),
+        // e NÃO solicitando um novo retorno pendente.
+        const isReplyingToClientReturn =
+          previousMessage && !previousMessage.isStaff;
+
         const nonTransitionStatuses = [
           "CONTRACT_DECLINED",
           "CANCELLED",
         ];
 
         const shouldChangeStatus =
+          !isReplyingToClientReturn &&
           currentApplication.status !== "WAITING_REAL_ESTATE_RETURN" &&
           !nonTransitionStatuses.includes(currentApplication.status);
 

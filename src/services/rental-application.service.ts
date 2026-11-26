@@ -1848,6 +1848,7 @@ export class RentalApplicationService {
           adminDecisionAt: new Date(),
           adminDecisionReason: params.reason,
           status: nextStatus,
+          previousStatus: null,
         },
       });
 
