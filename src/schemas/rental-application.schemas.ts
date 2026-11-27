@@ -233,6 +233,16 @@ export const adminDecisionSchema = z.object({
     .optional(),
 });
 
+export const bulkDeclineRentalApplicationsSchema = z.object({
+  applicationIds: z
+    .array(z.string().uuid("O ID da solicitação deve ser um UUID válido"))
+    .min(1, "Selecione pelo menos uma consulta"),
+  reason: z
+    .string()
+    .min(3, "O motivo deve conter pelo menos 3 caracteres")
+    .optional(),
+});
+
 export const listRentalApplicationsSchema = z.object({
   requesterId: z.string().uuid().optional(),
   status: rentalApplicationStatusSchema.optional(),

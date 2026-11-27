@@ -11,6 +11,7 @@ import { RentalApplicationService } from "../services/rental-application.service
 // Schemas
 import {
   adminDecisionSchema,
+  bulkDeclineRentalApplicationsSchema,
   contestRentalApplicationSchema,
   createRentalApplicationByCnpjSchema,
   createRentalApplicationByCpfSchema,
@@ -717,6 +718,19 @@ export class RentalApplicationController {
     });
 
     return response.json({ application });
+  }
+
+  async bulkDecline(request: Request, response: Response) {
+    const body = bulkDeclineRentalApplicationsSchema.parse(request.body);
+
+    const result = await rentalApplicationService.bulkDeclineApplications({
+      applicationIds: body.applicationIds,
+      userId: request.user!.id,
+      userRole: request.user!.role,
+      reason: body.reason,
+    });
+
+    return response.json(result);
   }
 
   async delete(request: Request, response: Response) {

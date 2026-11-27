@@ -113,6 +113,12 @@ rentalApplicationRoutes.post(
 );
 
 rentalApplicationRoutes.post(
+  "/bulk-decline",
+  authorize(UserRole.ADMIN),
+  asyncHandler(rentalApplicationController.bulkDecline),
+);
+
+rentalApplicationRoutes.post(
   "/:id/decline",
   authorize(
     UserRole.ADMIN,

@@ -2091,6 +2091,43 @@ export class RentalApplicationService {
     });
   }
 
+  async bulkDeclineApplications(params: {
+    applicationIds: string[];
+    userId: string;
+    userRole: string;
+    reason?: string;
+  }) {
+    const uniqueIds = Array.from(new Set(params.applicationIds));
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    for (const applicationId of uniqueIds) {
+      try {
+        await this.declineApplication({
+          applicationId,
+          userId: params.userId,
+          userRole: params.userRole,
+          reason: params.reason,
+        });
+        updatedCount += 1;
+      } catch (error) {
+        if (
+          error instanceof AppError &&
+          (error.code === "CONTRACT_ALREADY_SIGNED" || error.statusCode === 404)
+        ) {
+          skippedCount += 1;
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return {
+      updatedCount,
+      skippedCount,
+    };
+  }
+
   async markAsViewed(params: { applicationId: string }) {
     const application = await prisma.rentalApplication.findUnique({
       where: { id: params.applicationId },
