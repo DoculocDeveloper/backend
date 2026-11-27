@@ -16,5 +16,11 @@ reportRoutes.get(
   asyncHandler(reportController.getSummary)
 );
 
+reportRoutes.get(
+  "/applications",
+  authorize(UserRole.ADMIN),
+  asyncHandler(reportController.getApplications)
+);
+
 export { reportRoutes };
 

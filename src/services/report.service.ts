@@ -1,7 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { UserRole } from "../domain/roles.js";
 import { prisma } from "../lib/prisma.js";
-import { GetReportsSummaryQuery } from "../schemas/report.schemas.js";
+import {
+  GetReportApplicationsQuery,
+  GetReportsSummaryQuery,
+} from "../schemas/report.schemas.js";
 
 function parseDateBoundary(dateStr?: string, isEnd = false): Date | undefined {
   if (!dateStr) return undefined;
@@ -534,6 +537,127 @@ export class ReportService {
       },
       totals,
       realEstates: filteredRealEstates,
+    };
+  }
+
+  async getApplicationsByCategory(query: GetReportApplicationsQuery) {
+    const { category, startDate, endDate, requesterId } = query;
+
+    const gte = parseDateBoundary(startDate, false);
+    const lte = parseDateBoundary(endDate, true);
+
+    const createdAtFilter: Prisma.DateTimeFilter = {};
+    if (gte) createdAtFilter.gte = gte;
+    if (lte) createdAtFilter.lte = lte;
+
+    const where: Prisma.RentalApplicationWhereInput = {};
+    if (Object.keys(createdAtFilter).length > 0) {
+      where.createdAt = createdAtFilter;
+    }
+    if (requesterId) {
+      where.requesterId = requesterId;
+    }
+
+    const rows = await prisma.rentalApplication.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        document: true,
+        documentType: true,
+        tenantName: true,
+        status: true,
+        adminDecision: true,
+        rentValue: true,
+        requestedExpense: true,
+        createdAt: true,
+        requesterId: true,
+        requester: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            realEstateProfile: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+        contract: {
+          select: {
+            id: true,
+            signatureStatus: true,
+            signedAt: true,
+          },
+        },
+      },
+    });
+
+    const filtered = rows.filter((app) => {
+      const isRejected =
+        app.status === "ADMIN_REJECTED" ||
+        app.status === "REJECTED" ||
+        app.adminDecision === "REJECTED";
+      const isGenerated = app.status === "CONTRACT_GENERATED";
+      const isSigned =
+        isGenerated &&
+        (app.contract?.signatureStatus === "SIGNED" ||
+          (app.contract?.signedAt !== null &&
+            app.contract?.signedAt !== undefined));
+      const isDeclined = app.status === "CONTRACT_DECLINED";
+      const isOnlyConsulted = !isGenerated && !isRejected && !isDeclined;
+
+      switch (category) {
+        case "REJECTED":
+          return isRejected;
+        case "GENERATED":
+          return isGenerated;
+        case "SIGNED":
+          return isSigned;
+        case "DECLINED":
+          return isDeclined;
+        case "ONLY_CONSULTED":
+          return isOnlyConsulted;
+        case "ALL":
+        default:
+          return true;
+      }
+    });
+
+    let totalValue = 0;
+    const applications = filtered.map((app) => {
+      const value = Number(app.rentValue ?? app.requestedExpense ?? 0);
+      totalValue += value;
+
+      return {
+        id: app.id,
+        document: app.document,
+        documentType: app.documentType,
+        tenantName: app.tenantName,
+        status: app.status,
+        value,
+        requestedExpense: Number(app.requestedExpense ?? 0),
+        rentValue: Number(app.rentValue ?? 0),
+        createdAt: app.createdAt,
+        requesterName:
+          app.requester?.realEstateProfile?.name ||
+          app.requester?.name ||
+          "Imobiliária",
+        contract: app.contract
+          ? {
+              id: app.contract.id,
+              signatureStatus: app.contract.signatureStatus,
+              signedAt: app.contract.signedAt,
+            }
+          : null,
+      };
+    });
+
+    return {
+      total: applications.length,
+      totalValue: Number(totalValue.toFixed(2)),
+      applications,
     };
   }
 }

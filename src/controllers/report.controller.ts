@@ -1,5 +1,8 @@
 import { Request, Response } from "express";
-import { getReportsSummaryQuerySchema } from "../schemas/report.schemas.js";
+import {
+  getReportApplicationsQuerySchema,
+  getReportsSummaryQuerySchema,
+} from "../schemas/report.schemas.js";
 import { ReportService } from "../services/report.service.js";
 
 export class ReportController {
@@ -9,6 +12,15 @@ export class ReportController {
     const validatedQuery = getReportsSummaryQuerySchema.parse(request.query);
 
     const result = await this.reportService.getSummary(validatedQuery);
+
+    return response.json(result);
+  };
+
+  getApplications = async (request: Request, response: Response) => {
+    const validatedQuery = getReportApplicationsQuerySchema.parse(request.query);
+
+    const result =
+      await this.reportService.getApplicationsByCategory(validatedQuery);
 
     return response.json(result);
   };
