@@ -313,6 +313,15 @@ export class RentalApplicationController {
         },
         ...searchFilter,
       };
+    } else if (query.status === "CONTRACT_GENERATED" && !query.signatureStatus) {
+      baseWhere = {
+        status: "CONTRACT_GENERATED" as const,
+        OR: [
+          { contract: { is: null } },
+          { contract: { is: { signatureStatus: { not: "SIGNED" as const } } } },
+        ],
+        ...searchFilter,
+      };
     } else {
       const contractCondition = query.signatureStatus
         ? { is: { signatureStatus: query.signatureStatus } }
